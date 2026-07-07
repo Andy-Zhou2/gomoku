@@ -1,0 +1,289 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play Gomoku</title>
+<style>
+:root {
+  --ground: #EDEBE4; --panel: #F6F4EE; --ink: #272219; --ink-soft: #6E6659;
+  --line: #D8D3C6; --wood: #D2A85C; --wood-line: #8A6A34; --accent: #B5442C;
+  --stone-b: #1C1A17; --stone-w: #F5F2EA; --chip: #E3DFD4; --good: #3D7A4E;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --ground:#191611; --panel:#211D16; --ink:#E6E0D2; --ink-soft:#9A9284;
+    --line:#383226; --wood:#A5813F; --wood-line:#5C4620; --accent:#D96A4E;
+    --chip:#2E2920; --good:#7FB88E; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--ground); color:var(--ink);
+  font: 14px/1.45 system-ui, sans-serif; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+header { display:flex; align-items:baseline; gap:12px; padding:14px 20px 10px;
+  border-bottom:1px solid var(--line); }
+header h1 { margin:0; font:600 20px/1.2 "Iowan Old Style", Palatino, Georgia, serif; }
+header .sub { color:var(--ink-soft); font-size:12.5px; }
+.wrap { display:grid; grid-template-columns:minmax(430px,1fr) 280px; gap:16px;
+  padding:16px 20px; max-width:1020px; margin:0 auto; }
+@media (max-width:820px) { .wrap { grid-template-columns:1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; }
+.panel h2 { margin:0; padding:9px 12px; font-size:11px; font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft);
+  border-bottom:1px solid var(--line); }
+#board-panel { padding:14px; display:flex; justify-content:center; }
+#board-svg { width:100%; max-width:600px; height:auto; display:block; cursor:pointer; }
+.side { display:flex; flex-direction:column; gap:16px; }
+.controls { padding:12px; display:flex; flex-direction:column; gap:10px; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+button, select {
+  font:600 13px/1 system-ui, sans-serif; padding:8px 12px; cursor:pointer;
+  background:var(--chip); color:var(--ink); border:1px solid var(--line); border-radius:4px; }
+button:hover { border-color:var(--ink-soft); }
+button:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+button:disabled { opacity:.45; cursor:default; }
+label { font-size:12.5px; color:var(--ink-soft); }
+#status { padding:12px; font-size:14px; min-height:44px; }
+#status b { color:var(--accent); }
+.evalwrap { padding:12px; }
+.evalbar { height:12px; border-radius:6px; background:var(--stone-w);
+  border:1px solid var(--line); overflow:hidden; }
+.evalbar > div { height:100%; background:var(--stone-b); width:50%; transition:width .4s; }
+.evallab { display:flex; justify-content:space-between; font-size:11px;
+  color:var(--ink-soft); margin-top:4px; }
+.toggles { padding:0 12px 12px; font-size:12.5px; color:var(--ink-soft); }
+.toggles label { display:flex; gap:6px; align-items:center; cursor:pointer; }
+.spin { display:inline-block; width:10px; height:10px; border-radius:50%;
+  border:2px solid var(--ink-soft); border-top-color:transparent;
+  animation:sp 0.8s linear infinite; vertical-align:-1px; }
+@keyframes sp { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Play Gomoku</h1>
+  <span class="sub">vs AlphaZero-style engine · 15×15 · five in a row wins</span>
+</header>
+<div class="wrap">
+  <div class="panel" id="board-panel">
+    <svg id="board-svg" viewBox="0 0 640 640" role="img" aria-label="board"></svg>
+  </div>
+  <div class="side">
+    <div class="panel">
+      <h2>Game</h2>
+      <div class="controls">
+        <div class="row">
+          <button id="new-black">New game — play Black</button>
+        </div>
+        <div class="row">
+          <button id="new-white">New game — play White</button>
+        </div>
+        <div class="row">
+          <label>engine strength</label>
+          <select id="sims">
+            <option value="200">fast (200 sims)</option>
+            <option value="800" selected>strong (800 sims)</option>
+            <option value="2000">max (2000 sims)</option>
+          </select>
+        </div>
+        <div class="row"><button id="undo">Undo move</button></div>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="t-hints"> live analysis (searches your position while ticked)</label>
+        <div id="ana-status" class="mono" style="padding-top:6px; min-height:16px;"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Status</h2>
+      <div id="status">Choose a color to start.</div>
+      <div class="evalwrap">
+        <div class="evalbar"><div id="evalfill"></div></div>
+        <div class="evallab"><span>Black</span><span id="evaltxt" class="mono">±0.00</span><span>White</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const B = 15, COLS = "ABCDEFGHIJKLMNO";
+const coord = a => COLS[a % B] + Math.floor(a / B);
+const CELL = 40, PAD = 30, OFF = 5;
+const svgNS = "http://www.w3.org/2000/svg";
+const xy = a => [PAD + (a % B) * CELL + OFF, PAD + Math.floor(a / B) * CELL + OFF];
+
+let moves = [];          // full game, black first
+let human = 0;           // 0 black, 1 white
+let busy = false, over = false;
+let anaData = null, anaGen = 0;   // live analysis state
+
+const svg = document.getElementById("board-svg");
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(svgNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e); return e;
+}
+el("rect", { x:5, y:5, width:630, height:630, rx:8, fill:"var(--wood)" }, svg);
+for (let i = 0; i < B; i++) {
+  const q = PAD + i * CELL + OFF;
+  el("line", { x1:PAD+OFF, y1:q, x2:PAD+OFF+14*CELL, y2:q, stroke:"var(--wood-line)" }, svg);
+  el("line", { x1:q, y1:PAD+OFF, x2:q, y2:PAD+OFF+14*CELL, stroke:"var(--wood-line)" }, svg);
+  const t1 = el("text", { x:q, y:20, "text-anchor":"middle", "font-size":11, fill:"var(--wood-line)" }, svg);
+  t1.textContent = COLS[i];
+  const t2 = el("text", { x:16, y:q+4, "text-anchor":"middle", "font-size":11, fill:"var(--wood-line)" }, svg);
+  t2.textContent = i;
+}
+for (const [r,c] of [[3,3],[3,11],[7,7],[11,3],[11,11]])
+  el("circle", { cx:PAD+c*CELL+OFF, cy:PAD+r*CELL+OFF, r:3.4, fill:"var(--wood-line)" }, svg);
+const dyn = el("g", {}, svg);
+
+function draw() {
+  dyn.innerHTML = "";
+  const hints = document.getElementById("t-hints").checked;
+  if (hints && anaData && anaData.top && !over) {
+    for (const [a, pr] of anaData.top) {
+      if (moves.includes(a) || pr < 0.02) continue;
+      const [x, y] = xy(a);
+      el("circle", { cx:x, cy:y, r:6+11*Math.sqrt(pr), fill:"var(--accent)", opacity:0.25 }, dyn);
+      const t = el("text", { x, y:y-14, "text-anchor":"middle", "font-size":10.5,
+                             fill:"var(--accent)", "font-weight":700 }, dyn);
+      t.textContent = (pr * 100).toFixed(0) + "%";
+    }
+  }
+  moves.forEach((a, i) => {
+    const [x, y] = xy(a), p = i % 2;
+    el("circle", { cx:x, cy:y, r:16.5, fill:p===0?"var(--stone-b)":"var(--stone-w)",
+                   stroke:p===0?"#000":"#B9B2A2" }, dyn);
+    const t = el("text", { x, y:y+4, "text-anchor":"middle", "font-size":12, "font-weight":600,
+                           fill:p===0?"#CFC9BC":"#4A443A" }, dyn);
+    t.textContent = i + 1;
+  });
+  if (moves.length) {
+    const [x, y] = xy(moves[moves.length - 1]);
+    el("circle", { cx:x, cy:y, r:4.4, fill:"var(--accent)" }, dyn);
+  }
+}
+
+function setStatus(html) { document.getElementById("status").innerHTML = html; }
+function setEval(qBlack) {  // -1..1 from black's perspective
+  const pct = 50 + qBlack * 50;
+  document.getElementById("evalfill").style.width = pct + "%";
+  document.getElementById("evaltxt").textContent = (qBlack >= 0 ? "+" : "") + qBlack.toFixed(2);
+}
+
+function finish(winner) {
+  over = true;
+  if (winner === -1) setStatus("<b>Draw</b> — full board.");
+  else {
+    const you = winner === human;
+    setStatus(you ? "<b>You win!</b> Five in a row." :
+      `<b>Engine wins</b> — five in a row (${winner === 0 ? "Black" : "White"}).`);
+    setEval(winner === 0 ? 1 : -1);
+  }
+}
+
+function humanTurn() { return !busy && !over && moves.length % 2 === human; }
+
+async function analysisLoop() {
+  const myGen = ++anaGen;
+  const box = document.getElementById("t-hints");
+  const st = document.getElementById("ana-status");
+  while (box.checked && humanTurn()) {
+    const snap = moves.length;
+    let j;
+    try {
+      const r = await fetch("/api/analyze", { method:"POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ moves, chunk: 250 }) });
+      j = await r.json();
+    } catch (e) { st.textContent = "analysis: connection error"; return; }
+    if (myGen !== anaGen || snap !== moves.length || !box.checked) return;
+    if (j.error || j.winner !== undefined) return;
+    anaData = j;
+    draw();
+    const best = j.top[0];
+    const vb = j.player === 0 ? j.value : -j.value;   // black's perspective
+    setEval(vb);
+    st.textContent = `${j.sims.toLocaleString()} sims · best ${coord(best[0])} ` +
+      `${(best[1]*100).toFixed(0)}% (Q ${best[2] >= 0 ? "+" : ""}${best[2].toFixed(2)})`;
+    if (j.sims >= j.cap) { st.textContent += " · max depth"; return; }
+  }
+}
+function stopAnalysis() {
+  anaGen++; anaData = null;
+  document.getElementById("ana-status").textContent = "";
+}
+
+async function engineTurn() {
+  busy = true;
+  setStatus('Engine thinking&hellip; <span class="spin"></span>');
+  try {
+    const r = await fetch("/api/move", { method:"POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ moves, sims:+document.getElementById("sims").value }) });
+    const j = await r.json();
+    if (j.error) { setStatus("Error: " + j.error); busy = false; return; }
+    if (j.move !== undefined) {
+      const engineColor = moves.length % 2;
+      moves.push(j.move);
+      draw();
+      const qb = engineColor === 0 ? j.q : -j.q;
+      setEval(qb);
+      if (j.winner !== undefined) { finish(j.winner); }
+      else setStatus(`Engine played <b class="mono">${coord(j.move)}</b> · ` +
+        `engine eval <span class="mono">${j.q >= 0 ? "+" : ""}${j.q.toFixed(2)}</span> for itself · your move.`);
+    } else if (j.winner !== undefined) { draw(); finish(j.winner); }
+  } catch (e) { setStatus("Connection error: " + e); }
+  busy = false;
+  if (document.getElementById("t-hints").checked && humanTurn()) analysisLoop();
+}
+
+svg.addEventListener("click", ev => {
+  if (busy || over) return;
+  if (moves.length % 2 !== human) return;
+  const pt = svg.createSVGPoint();
+  pt.x = ev.clientX; pt.y = ev.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const c = Math.round((q.x - PAD - OFF) / CELL), r = Math.round((q.y - PAD - OFF) / CELL);
+  if (c < 0 || c >= B || r < 0 || r >= B) return;
+  const a = r * B + c;
+  if (moves.includes(a)) return;
+  stopAnalysis();
+  moves.push(a);
+  draw();
+  // did the human just win / draw? the server tells us on the engine call
+  engineTurn();
+});
+
+function newGame(color) {
+  moves = []; human = color; over = false; busy = false;
+  stopAnalysis();
+  draw(); setEval(0);
+  if (human === 1) engineTurn();
+  else {
+    setStatus("Your move — you are <b>Black</b>.");
+    if (document.getElementById("t-hints").checked) analysisLoop();
+  }
+}
+document.getElementById("new-black").onclick = () => newGame(0);
+document.getElementById("new-white").onclick = () => newGame(1);
+document.getElementById("undo").onclick = () => {
+  if (busy) return;
+  // pop back to the human's previous turn
+  const n = over ? 1 : 2;
+  for (let i = 0; i < n && moves.length; i++) moves.pop();
+  while (moves.length && moves.length % 2 !== human) moves.pop();
+  over = false;
+  stopAnalysis();
+  draw(); setStatus("Your move.");
+  if (document.getElementById("t-hints").checked) analysisLoop();
+};
+document.getElementById("t-hints").onchange = () => {
+  if (document.getElementById("t-hints").checked) { if (humanTurn()) analysisLoop(); }
+  else stopAnalysis();
+  draw();
+};
+draw();
+</script>
+</body>
+</html>

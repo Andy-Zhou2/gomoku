@@ -1,0 +1,523 @@
+<title>Gomoku Self-Play Viewer</title>
+<style>
+:root {
+  --ground: #EDEBE4; --panel: #F6F4EE; --ink: #272219; --ink-soft: #6E6659;
+  --line: #D8D3C6; --wood: #D2A85C; --wood-line: #8A6A34; --accent: #B5442C;
+  --stone-b: #1C1A17; --stone-w: #F5F2EA; --chip: #E3DFD4;
+  --good: #3D7A4E; --sensei: #7A5C2E; --engine: #4A5A78;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #191611; --panel: #211D16; --ink: #E6E0D2; --ink-soft: #9A9284;
+    --line: #383226; --wood: #A5813F; --wood-line: #5C4620; --accent: #D96A4E;
+    --chip: #2E2920; --good: #7FB88E; --sensei: #C9A464; --engine: #93A8CC;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #191611; --panel: #211D16; --ink: #E6E0D2; --ink-soft: #9A9284;
+  --line: #383226; --wood: #A5813F; --wood-line: #5C4620; --accent: #D96A4E;
+  --chip: #2E2920; --good: #7FB88E; --sensei: #C9A464; --engine: #93A8CC;
+}
+:root[data-theme="light"] {
+  --ground: #EDEBE4; --panel: #F6F4EE; --ink: #272219; --ink-soft: #6E6659;
+  --line: #D8D3C6; --wood: #D2A85C; --wood-line: #8A6A34; --accent: #B5442C;
+  --chip: #E3DFD4; --good: #3D7A4E; --sensei: #7A5C2E; --engine: #4A5A78;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font: 14px/1.45 system-ui, sans-serif;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 14px 20px 10px; border-bottom: 1px solid var(--line);
+}
+header h1 {
+  margin: 0; font: 600 20px/1.2 "Iowan Old Style", Palatino, Georgia, serif;
+  letter-spacing: 0.01em;
+}
+header .sub { color: var(--ink-soft); font-size: 12.5px; }
+header label {
+  margin-left: auto; font-size: 12px; color: var(--ink-soft); cursor: pointer;
+  border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; background: var(--panel);
+}
+header label:hover { border-color: var(--ink-soft); }
+#file { display: none; }
+
+.wrap {
+  display: grid; grid-template-columns: 230px minmax(430px, 1fr) 330px;
+  gap: 16px; padding: 16px 20px; max-width: 1280px; margin: 0 auto;
+}
+@media (max-width: 1020px) { .wrap { grid-template-columns: 1fr; } }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.panel h2 {
+  margin: 0; padding: 9px 12px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+/* game list */
+#games { max-height: calc(100vh - 130px); overflow-y: auto; }
+.iter-head {
+  padding: 8px 12px 3px; font-size: 11px; letter-spacing: 0.07em;
+  color: var(--sensei); font-weight: 600;
+}
+.g-item {
+  display: flex; gap: 8px; align-items: center; width: 100%; text-align: left;
+  padding: 5px 12px; border: 0; background: none; color: var(--ink);
+  font: inherit; cursor: pointer;
+}
+.g-item:hover { background: var(--chip); }
+.g-item.sel { background: var(--chip); box-shadow: inset 2px 0 0 var(--accent); }
+.g-item .res {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--chip);
+  border: 1px solid var(--line); white-space: nowrap;
+}
+.g-item.sel .res, .g-item:hover .res { border-color: var(--ink-soft); }
+
+/* board */
+#board-panel { display: flex; flex-direction: column; align-items: center; padding: 14px; }
+#board-svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.controls { display: flex; gap: 6px; align-items: center; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+.controls button {
+  font: 600 13px/1 ui-monospace, monospace; padding: 7px 12px; cursor: pointer;
+  background: var(--chip); color: var(--ink); border: 1px solid var(--line); border-radius: 4px;
+}
+.controls button:hover { border-color: var(--ink-soft); }
+.controls button:focus-visible, .g-item:focus-visible, header label:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+#pos { min-width: 84px; text-align: center; color: var(--ink-soft); font-size: 12.5px; }
+.toggles { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.toggles label { cursor: pointer; display: flex; gap: 4px; align-items: center; }
+
+/* analysis column */
+.an { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+#evalchart { width: 100%; height: 92px; display: block; cursor: pointer; }
+.bars { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 5px; }
+.bar-row { display: grid; grid-template-columns: 42px 1fr 48px; gap: 8px; align-items: center; font-size: 12.5px; }
+.bar-track { height: 9px; background: var(--chip); border-radius: 2px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--engine); border-radius: 2px; }
+.bar-row.chosen .bar-fill { background: var(--accent); }
+.bar-row .coord { color: var(--ink-soft); }
+#commentary { max-height: 320px; overflow-y: auto; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 7px; }
+.cmt { font-size: 12.8px; display: grid; grid-template-columns: 56px 1fr; gap: 8px; }
+.cmt .who { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding-top: 2px; }
+.cmt.sensei .who { color: var(--sensei); }
+.cmt.engine .who { color: var(--engine); }
+.cmt .mv { color: var(--ink-soft); }
+.cmt.cur { background: var(--chip); border-radius: 4px; padding: 3px 5px; margin: -3px -5px; }
+.stat-row {
+  display: flex; gap: 14px; padding: 8px 12px; font-size: 12.5px; color: var(--ink-soft);
+  border-top: 1px solid var(--line);
+}
+.stat-row b { color: var(--ink); font-weight: 600; }
+</style>
+
+<header>
+  <h1>Gomoku Self-Play Viewer</h1>
+  <span class="sub">AlphaZero training rollouts · 15×15 freestyle</span>
+  <label>load games.jsonl <input type="file" id="file" accept=".jsonl,.json"></label>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Rollouts</h2>
+    <div id="games"></div>
+  </div>
+
+  <div class="panel" id="board-panel">
+    <svg id="board-svg" viewBox="0 0 640 640" role="img" aria-label="gomoku board"></svg>
+    <div class="controls">
+      <button id="b-first" title="first move">|&#8592;</button>
+      <button id="b-prev" title="previous (←)">&#8592;</button>
+      <button id="b-play" title="autoplay (space)">&#9654;</button>
+      <button id="b-next" title="next (→)">&#8594;</button>
+      <button id="b-last" title="last move">&#8594;|</button>
+      <span id="pos" class="mono"></span>
+    </div>
+    <div class="toggles">
+      <label><input type="checkbox" id="t-nums" checked> move numbers</label>
+      <label><input type="checkbox" id="t-pol" checked> policy candidates</label>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="panel">
+      <h2>Root value (Black's view)</h2>
+      <svg id="evalchart"></svg>
+      <div class="stat-row mono" id="stats"></div>
+    </div>
+    <div class="panel">
+      <h2>Search candidates &pi;</h2>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="panel">
+      <h2>Commentary</h2>
+      <div id="commentary"></div>
+    </div>
+  </div>
+</div>
+
+<script id="embedded-games" type="application/x-ndjson">
+__GAMES__
+</script>
+
+<script>
+"use strict";
+const B = 15, COLS = "ABCDEFGHIJKLMNO";
+const coord = a => COLS[a % B] + Math.floor(a / B);
+const names = ["Black", "White"];
+
+// ---------- data ----------
+let games = [], gi = 0, mi = 0, playing = null;
+
+function parseJSONL(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try { out.push(JSON.parse(t)); } catch (e) { /* skip bad line */ }
+  }
+  return out;
+}
+
+// ---------- board state / pattern helpers ----------
+function replay(game, upto) {
+  const bd = new Int8Array(B * B).fill(-1);
+  for (const [a, p] of (game.open || [])) bd[a] = p;   // seeded opening stones
+  for (let i = 0; i < upto; i++) bd[game.moves[i].a] = game.moves[i].p;
+  return bd;
+}
+const inb = (r, c) => r >= 0 && r < B && c >= 0 && c < B;
+function lineStats(bd, a, p) {
+  // for the stone (virtually) at `a` owned by p: per direction {len, open}
+  const r0 = Math.floor(a / B), c0 = a % B;
+  return [[0, 1], [1, 0], [1, 1], [1, -1]].map(([dr, dc]) => {
+    let len = 1, open = 0;
+    for (const s of [1, -1]) {
+      let r = r0 + dr * s, c = c0 + dc * s;
+      while (inb(r, c) && bd[r * B + c] === p) { len++; r += dr * s; c += dc * s; }
+      if (inb(r, c) && bd[r * B + c] === -1) open++;
+    }
+    return { len, open };
+  });
+}
+function bestThreat(bd, p) {
+  // strongest line p has on the board: prefer longer, then more open ends
+  let best = { len: 0, open: 0 };
+  for (let a = 0; a < B * B; a++) if (bd[a] === p)
+    for (const s of lineStats(bd, a, p))
+      if (s.len > best.len || (s.len === best.len && s.open > best.open)) best = s;
+  return best;
+}
+function winLine(bd, a, p) {
+  // returns [startIdx, endIdx] of a 5+ line through a, or null
+  const r0 = Math.floor(a / B), c0 = a % B;
+  for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+    let lo = 0, hi = 0;
+    while (inb(r0 - dr * (lo + 1), c0 - dc * (lo + 1)) && bd[(r0 - dr * (lo + 1)) * B + c0 - dc * (lo + 1)] === p) lo++;
+    while (inb(r0 + dr * (hi + 1), c0 + dc * (hi + 1)) && bd[(r0 + dr * (hi + 1)) * B + c0 + dc * (hi + 1)] === p) hi++;
+    if (lo + hi + 1 >= 5)
+      return [(r0 - dr * lo) * B + c0 - dc * lo, (r0 + dr * hi) * B + c0 + dc * hi];
+  }
+  return null;
+}
+
+// ---------- commentary generation ----------
+function vBlack(m) { return m.p === 0 ? m.v : -m.v; }
+function annotate(game) {
+  const out = [];  // out[i] = list of {who, text} for move i
+  const mvs = game.moves;
+  for (let i = 0; i < mvs.length; i++) {
+    const m = mvs[i], p = m.p, o = 1 - p, notes = [];
+    const before = replay(game, i);
+    const after = replay(game, i + 1);
+    const oppBefore = bestThreat(before, o);
+    const mine = lineStats(after, m.a, p);
+    const top = mine.reduce((x, y) => (y.len > x.len || (y.len === x.len && y.open > x.open)) ? y : x);
+    // what would the opponent have gotten by playing here?
+    const virt = lineStats(before, m.a, o).reduce((x, y) => y.len > x.len ? y : x);
+
+    if (i === 0) {
+      if (game.open && game.open.length)
+        notes.push({ who: "SENSEI", text: `Position seeded with ${game.open.length} random stones (shown dashed).` });
+      else {
+        const r = Math.floor(m.a / B), c = m.a % B;
+        const d = Math.max(Math.abs(r - 7), Math.abs(c - 7));
+        notes.push({ who: "SENSEI", text: d <= 2 ? `Opens near the center (${coord(m.a)}) — textbook.` :
+          `An offbeat opening at ${coord(m.a)}, far from the center.` });
+      }
+    }
+    if (top.len >= 5) {
+      notes.push({ who: "ENGINE", text: `Five in a row — ${names[p]} wins.` });
+    } else {
+      if (top.len === 4 && top.open === 2)
+        notes.push({ who: "SENSEI", text: `Open four for ${names[p]} — two winning points, this cannot be stopped.` });
+      else if (top.len === 4 && top.open === 1)
+        notes.push({ who: "SENSEI", text: `${names[p]} makes a four — ${names[o]} must block immediately.` });
+      else {
+        const forks = mine.filter(s => s.len >= 3 && s.open === 2).length;
+        if (forks >= 2) notes.push({ who: "SENSEI", text: `Double open three — ${names[p]} forks the position.` });
+        else if (top.len === 3 && top.open === 2 && virt.len < 4)
+          notes.push({ who: "SENSEI", text: `${names[p]} builds an open three.` });
+      }
+      if (virt.len >= 5)
+        notes.push({ who: "SENSEI", text: `${coord(m.a)} blocks ${names[o]}'s four just in time.` });
+      else if (virt.len === 4)
+        notes.push({ who: "SENSEI", text: `${names[p]} steps in front of ${names[o]}'s three.` });
+      // missed defense: opponent already had a live four and mover didn't deal with it
+      if (oppBefore.len >= 4 && oppBefore.open >= 1 && virt.len < 4 && top.len < 5) {
+        const t = bestThreat(after, o);
+        if (t.len >= 4 && t.open >= 1)
+          notes.push({ who: "ENGINE", text: `${names[o]} threatens five and ${names[p]} looks away — search already gives Q=${m.q.toFixed(2)}.` });
+      }
+    }
+    // policy commentary
+    const rank = m.top.findIndex(t => t[0] === m.a);
+    if (rank === 0 && m.top[0][1] >= 0.9)
+      notes.push({ who: "ENGINE", text: `Forced: ${(m.top[0][1] * 100).toFixed(0)}% of visits on ${coord(m.a)}.` });
+    else if (rank > 0)
+      notes.push({ who: "ENGINE", text: `Search preferred ${coord(m.top[0][0])} (π=${(m.top[0][1] * 100).toFixed(0)}%) — exploration sampled ${coord(m.a)} instead.` });
+    else if (rank < 0)
+      notes.push({ who: "ENGINE", text: `${coord(m.a)} was outside the top-5 candidates — a pure exploration move.` });
+    // eval swing
+    if (i > 0) {
+      const dv = vBlack(m) - vBlack(mvs[i - 1]);
+      if (Math.abs(dv) >= 0.35)
+        notes.push({ who: "ENGINE", text: `Evaluation swings ${dv > 0 ? "toward Black" : "toward White"}: ${vBlack(mvs[i - 1]).toFixed(2)} → ${vBlack(m).toFixed(2)}.` });
+    }
+    out.push(notes);
+  }
+  // game wrap-up
+  const w = game.winner;
+  out[mvs.length - 1].push({
+    who: "SENSEI",
+    text: w < 0 ? "A full board — drawn." :
+      `${names[w]} wins in ${game.length} moves${game.length <= 11 ? " — the defense never showed up." : "."}`,
+  });
+  return out;
+}
+
+// ---------- rendering ----------
+const svgNS = "http://www.w3.org/2000/svg";
+const CELL = 40, PAD = 30;
+const xy = a => [PAD + (a % B) * CELL + 5, PAD + Math.floor(a / B) * CELL + 5];
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(svgNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+
+function drawBoardBase(svg) {
+  svg.innerHTML = "";
+  el("rect", { x: 5, y: 5, width: 630, height: 630, rx: 8, fill: "var(--wood)" }, svg);
+  for (let i = 0; i < B; i++) {
+    const q = PAD + i * CELL + 5;
+    el("line", { x1: PAD + 5, y1: q, x2: PAD + 5 + 14 * CELL, y2: q, stroke: "var(--wood-line)", "stroke-width": 1 }, svg);
+    el("line", { x1: q, y1: PAD + 5, x2: q, y2: PAD + 5 + 14 * CELL, stroke: "var(--wood-line)", "stroke-width": 1 }, svg);
+    const t1 = el("text", { x: q, y: 20, "text-anchor": "middle", "font-size": 11, fill: "var(--wood-line)" }, svg);
+    t1.textContent = COLS[i];
+    const t2 = el("text", { x: 16, y: q + 4, "text-anchor": "middle", "font-size": 11, fill: "var(--wood-line)" }, svg);
+    t2.textContent = i;
+  }
+  for (const [r, c] of [[3, 3], [3, 11], [7, 7], [11, 3], [11, 11]])
+    el("circle", { cx: PAD + c * CELL + 5, cy: PAD + r * CELL + 5, r: 3.4, fill: "var(--wood-line)" }, svg);
+  return el("g", {}, svg); // dynamic layer
+}
+
+let dynLayer = null;
+function drawPosition() {
+  const g = games[gi];
+  if (!g) return;
+  const mvs = g.moves;
+  dynLayer.innerHTML = "";
+  const showNums = document.getElementById("t-nums").checked;
+  const showPol = document.getElementById("t-pol").checked;
+
+  // policy candidates for the NEXT move (what the search was choosing between)
+  if (showPol && mi < mvs.length) {
+    for (const [a, pr] of mvs[mi].top) {
+      if (pr < 0.02) continue;
+      const [x, y] = xy(a);
+      el("circle", { cx: x, cy: y, r: 6 + 11 * Math.sqrt(pr), fill: "var(--accent)", opacity: 0.28 }, dynLayer);
+      const t = el("text", { x, y: y - 14, "text-anchor": "middle", "font-size": 10.5, fill: "var(--accent)", "font-weight": 700 }, dynLayer);
+      t.textContent = (pr * 100).toFixed(0) + "%";
+    }
+  }
+  for (const [a, p] of (g.open || [])) {   // seeded stones: dashed ring, no number
+    const [x, y] = xy(a);
+    el("circle", { cx: x, cy: y, r: 16.5, fill: p === 0 ? "var(--stone-b)" : "var(--stone-w)",
+                   stroke: "var(--accent)", "stroke-width": 1.4, "stroke-dasharray": "3 3" }, dynLayer);
+  }
+  for (let i = 0; i < mi; i++) {
+    const m = mvs[i], [x, y] = xy(m.a);
+    el("circle", { cx: x, cy: y, r: 16.5, fill: m.p === 0 ? "var(--stone-b)" : "var(--stone-w)",
+                   stroke: m.p === 0 ? "#000" : "#B9B2A2", "stroke-width": 1 }, dynLayer);
+    if (showNums) {
+      const t = el("text", { x, y: y + 4, "text-anchor": "middle", "font-size": 12,
+                             fill: m.p === 0 ? "#CFC9BC" : "#4A443A", "font-weight": 600 }, dynLayer);
+      t.textContent = i + 1;
+    }
+  }
+  if (mi > 0) {
+    const lm = mvs[mi - 1], [x, y] = xy(lm.a);
+    el("circle", { cx: x, cy: y, r: 4.4, fill: "var(--accent)" }, dynLayer);
+    // win line on the final position
+    if (mi === mvs.length && g.winner >= 0) {
+      const bd = replay(g, mi);
+      const wl = winLine(bd, lm.a, lm.p);
+      if (wl) {
+        const [x1, y1] = xy(wl[0]), [x2, y2] = xy(wl[1]);
+        el("line", { x1, y1, x2, y2, stroke: "var(--accent)", "stroke-width": 4,
+                     "stroke-linecap": "round", opacity: 0.75 }, dynLayer);
+      }
+    }
+  }
+  document.getElementById("pos").textContent = `move ${mi}/${mvs.length}`;
+  drawEval();
+  drawBars();
+  drawCommentary();
+  drawStats();
+}
+
+function drawEval() {
+  const svg = document.getElementById("evalchart");
+  const g = games[gi];
+  svg.innerHTML = "";
+  const W = svg.clientWidth || 300, H = 92, n = g.moves.length;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const X = i => 8 + (W - 16) * (n <= 1 ? 0 : i / (n - 1));
+  const Y = v => H / 2 - v * (H / 2 - 10);
+  el("line", { x1: 8, y1: H / 2, x2: W - 8, y2: H / 2, stroke: "var(--line)", "stroke-width": 1 }, svg);
+  const lbl = el("text", { x: W - 10, y: 14, "text-anchor": "end", "font-size": 9.5, fill: "var(--ink-soft)" }, svg);
+  lbl.textContent = "+1 Black";
+  const lbl2 = el("text", { x: W - 10, y: H - 6, "text-anchor": "end", "font-size": 9.5, fill: "var(--ink-soft)" }, svg);
+  lbl2.textContent = "-1 White";
+  const pts = g.moves.map((m, i) => `${X(i)},${Y(vBlack(m))}`).join(" ");
+  el("polyline", { points: pts, fill: "none", stroke: "var(--accent)", "stroke-width": 1.8 }, svg);
+  if (mi > 0) {
+    const m = g.moves[mi - 1];
+    el("circle", { cx: X(mi - 1), cy: Y(vBlack(m)), r: 4, fill: "var(--accent)" }, svg);
+  }
+  svg.onclick = ev => {
+    const r = svg.getBoundingClientRect();
+    mi = Math.max(0, Math.min(n, Math.round((ev.clientX - r.left - 8) / (r.width - 16) * (n - 1)) + 1));
+    drawPosition();
+  };
+}
+
+function drawBars() {
+  const div = document.getElementById("bars");
+  const g = games[gi];
+  div.innerHTML = "";
+  if (mi >= g.moves.length) { div.innerHTML = '<span style="color:var(--ink-soft);font-size:12px">game over</span>'; return; }
+  const m = g.moves[mi];
+  for (const [a, pr] of m.top) {
+    if (pr < 0.001) continue;
+    const row = document.createElement("div");
+    row.className = "bar-row mono" + (a === m.a ? " chosen" : "");
+    row.innerHTML = `<span class="coord">${coord(a)}</span>` +
+      `<span class="bar-track"><span class="bar-fill" style="width:${(pr * 100).toFixed(1)}%"></span></span>` +
+      `<span>${(pr * 100).toFixed(1)}%</span>`;
+    div.appendChild(row);
+  }
+}
+
+function drawCommentary() {
+  const div = document.getElementById("commentary");
+  const g = games[gi];
+  div.innerHTML = "";
+  for (let i = 0; i < Math.min(mi, g.moves.length); i++) {
+    for (const n of g.notes[i]) {
+      const d = document.createElement("div");
+      d.className = "cmt " + n.who.toLowerCase() + (i === mi - 1 ? " cur" : "");
+      d.innerHTML = `<span class="who">${n.who}</span><span><span class="mv mono">${i + 1}. ${coord(g.moves[i].a)}</span> — ${n.text}</span>`;
+      div.appendChild(d);
+    }
+  }
+  div.scrollTop = div.scrollHeight;
+}
+
+function drawStats() {
+  const g = games[gi];
+  const s = document.getElementById("stats");
+  if (mi === 0) { s.innerHTML = `<span>iter <b>${g.iter}</b></span><span>${g.length} moves</span>`; return; }
+  const m = g.moves[mi - 1];
+  s.innerHTML = `<span>iter <b>${g.iter}</b></span>` +
+    `<span>Q(move) <b>${m.q.toFixed(2)}</b></span>` +
+    `<span>root V <b>${vBlack(m).toFixed(2)}</b> (Black)</span>`;
+}
+
+// ---------- game list ----------
+function buildList() {
+  const div = document.getElementById("games");
+  div.innerHTML = "";
+  let lastIter = null;
+  games.forEach((g, i) => {
+    if (g.iter !== lastIter) {
+      lastIter = g.iter;
+      const h = document.createElement("div");
+      h.className = "iter-head";
+      h.textContent = `iteration ${g.iter}`;
+      div.appendChild(h);
+    }
+    const b = document.createElement("button");
+    b.className = "g-item" + (i === gi ? " sel" : "");
+    const res = g.winner === 0 ? "B+" : g.winner === 1 ? "W+" : "=";
+    b.innerHTML = `<span>game ${i + 1}</span><span class="res mono">${res} · ${g.length}mv</span>`;
+    b.onclick = () => { selectGame(i); };
+    div.appendChild(b);
+  });
+}
+function selectGame(i) {
+  gi = i; mi = games[i].moves.length; // open at final position
+  stopPlay();
+  buildList();
+  drawPosition();
+}
+
+// ---------- transport ----------
+function step(d) { mi = Math.max(0, Math.min(games[gi].moves.length, mi + d)); drawPosition(); }
+function stopPlay() {
+  if (playing) { clearInterval(playing); playing = null; document.getElementById("b-play").innerHTML = "&#9654;"; }
+}
+document.getElementById("b-first").onclick = () => { stopPlay(); mi = 0; drawPosition(); };
+document.getElementById("b-last").onclick = () => { stopPlay(); mi = games[gi].moves.length; drawPosition(); };
+document.getElementById("b-prev").onclick = () => { stopPlay(); step(-1); };
+document.getElementById("b-next").onclick = () => { stopPlay(); step(1); };
+document.getElementById("b-play").onclick = () => {
+  if (playing) { stopPlay(); return; }
+  if (mi >= games[gi].moves.length) mi = 0;
+  document.getElementById("b-play").innerHTML = "&#10074;&#10074;";
+  playing = setInterval(() => {
+    if (mi >= games[gi].moves.length) stopPlay(); else step(1);
+  }, 650);
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") { stopPlay(); step(-1); }
+  else if (e.key === "ArrowRight") { stopPlay(); step(1); }
+  else if (e.key === " ") { e.preventDefault(); document.getElementById("b-play").onclick(); }
+});
+document.getElementById("t-nums").onchange = drawPosition;
+document.getElementById("t-pol").onchange = drawPosition;
+document.getElementById("file").onchange = ev => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  f.text().then(t => { loadGames(parseJSONL(t)); });
+};
+window.addEventListener("resize", () => drawEval());
+
+// ---------- boot ----------
+function loadGames(list) {
+  if (!list.length) return;
+  games = list;
+  for (const g of games) g.notes = annotate(g);
+  gi = 0; mi = games[0].moves.length;
+  buildList();
+  drawPosition();
+}
+dynLayer = drawBoardBase(document.getElementById("board-svg"));
+loadGames(parseJSONL(document.getElementById("embedded-games").textContent));
+</script>
