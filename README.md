@@ -119,3 +119,22 @@ pre-patch self, 100% vs random, blocks fours and threes with vanilla search.
 Known simplifications (deliberate, v1): no tree reuse between moves, no
 separate eval-gating of checkpoints (continuous training like AZ), lockstep
 sims mean tree depth syncs per step.
+
+## Ultimate Tic-Tac-Toe (`uttt_*.py`)
+
+The same machinery applied to Ultimate Tic-Tac-Toe (9×9, forced-board rule:
+your move's cell position sends the opponent to that sub-board; if that board
+is decided, they play anywhere). Fully tensorized rules (`uttt_game.py`),
+batched MCTS (`uttt_mcts.py`, same tree code with the richer scratch state),
+self-play (`uttt_selfplay.py`), and training:
+
+```bash
+python uttt_tests.py     # rules fuzzed vs slow reference + MCTS tactics
+python uttt_train.py --iters 200 --compile --q-filter --forced-playouts --out runs/uttt
+```
+
+Features (8 planes): my/opp cells, my/opp won boards, drawn boards, the legal
+mask (encodes the forced-board rule for the net), last move, color. Dihedral
+augmentation is valid — the 8 symmetries of the macro grid map sub-boards
+consistently. `net.py`/`data.py` take board_size/planes params shared by both
+games.

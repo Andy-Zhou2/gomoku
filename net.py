@@ -21,11 +21,12 @@ class ResBlock(nn.Module):
 
 
 class PolicyValueNet(nn.Module):
-    def __init__(self, channels=64, blocks=6):
+    def __init__(self, channels=64, blocks=6, board_size=BOARD, in_planes=IN_PLANES):
         super().__init__()
         self.channels, self.blocks_n = channels, blocks
+        a = board_size * board_size
         self.stem = nn.Sequential(
-            nn.Conv2d(IN_PLANES, channels, 3, padding=1, bias=False),
+            nn.Conv2d(in_planes, channels, 3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
             nn.ReLU(inplace=True),
         )
@@ -33,11 +34,11 @@ class PolicyValueNet(nn.Module):
         # policy head
         self.p_conv = nn.Conv2d(channels, 2, 1, bias=False)
         self.p_bn = nn.BatchNorm2d(2)
-        self.p_fc = nn.Linear(2 * A, A)
+        self.p_fc = nn.Linear(2 * a, a)
         # value head
         self.v_conv = nn.Conv2d(channels, 1, 1, bias=False)
         self.v_bn = nn.BatchNorm2d(1)
-        self.v_fc1 = nn.Linear(A, 64)
+        self.v_fc1 = nn.Linear(a, 64)
         self.v_fc2 = nn.Linear(64, 1)
 
     def forward(self, x):
@@ -49,5 +50,5 @@ class PolicyValueNet(nn.Module):
         return logits, v
 
 
-def build_net(channels=64, blocks=6, device="cuda"):
-    return PolicyValueNet(channels, blocks).to(device)
+def build_net(channels=64, blocks=6, device="cuda", board_size=BOARD, in_planes=IN_PLANES):
+    return PolicyValueNet(channels, blocks, board_size, in_planes).to(device)

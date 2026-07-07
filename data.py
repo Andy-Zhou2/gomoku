@@ -6,10 +6,12 @@ from game import A, BOARD, IN_PLANES, dihedral
 
 
 class ReplayBuffer:
-    def __init__(self, capacity=500_000):
+    def __init__(self, capacity=500_000, planes=IN_PLANES, board=BOARD):
         self.cap = capacity
-        self.feats = np.zeros((capacity, IN_PLANES, BOARD, BOARD), dtype=np.uint8)
-        self.pis = np.zeros((capacity, A), dtype=np.float16)
+        self.board = board
+        self.actions = board * board
+        self.feats = np.zeros((capacity, planes, board, board), dtype=np.uint8)
+        self.pis = np.zeros((capacity, self.actions), dtype=np.float16)
         self.zs = np.zeros((capacity,), dtype=np.float32)
         self.ptr = 0
         self.size = 0
@@ -31,5 +33,5 @@ class ReplayBuffer:
         # random dihedral transform (one per batch)
         k = np.random.randint(8)
         f = dihedral(f, k)
-        p = dihedral(p.view(-1, BOARD, BOARD), k).reshape(-1, A)
+        p = dihedral(p.view(-1, self.board, self.board), k).reshape(-1, self.actions)
         return f, p, z
