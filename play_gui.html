@@ -9,11 +9,15 @@
   --ground: #EDEBE4; --panel: #F6F4EE; --ink: #272219; --ink-soft: #6E6659;
   --line: #D8D3C6; --wood: #D2A85C; --wood-line: #8A6A34; --accent: #B5442C;
   --stone-b: #1C1A17; --stone-w: #F5F2EA; --chip: #E3DFD4; --good: #3D7A4E;
+  --wr: #2a78d6;
+  --q0: #1d7a3f; --q1: #ecd15c; --q2: #d3702c; --q3: #9e2b26;
+  --q1-ink: #3a3020;
 }
 @media (prefers-color-scheme: dark) {
   :root { --ground:#191611; --panel:#211D16; --ink:#E6E0D2; --ink-soft:#9A9284;
     --line:#383226; --wood:#A5813F; --wood-line:#5C4620; --accent:#D96A4E;
-    --chip:#2E2920; --good:#7FB88E; }
+    --chip:#2E2920; --good:#7FB88E; --wr:#3987e5;
+    --q0:#2a9e54; --q1:#f2dc74; --q2:#e0813a; --q3:#b0362f; }
 }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--ground); color:var(--ink);
@@ -23,16 +27,20 @@ header { display:flex; align-items:baseline; gap:12px; padding:14px 20px 10px;
   border-bottom:1px solid var(--line); }
 header h1 { margin:0; font:600 20px/1.2 "Iowan Old Style", Palatino, Georgia, serif; }
 header .sub { color:var(--ink-soft); font-size:12.5px; }
-.wrap { display:grid; grid-template-columns:minmax(430px,1fr) 280px; gap:16px;
-  padding:16px 20px; max-width:1020px; margin:0 auto; }
+.wrap { display:grid; grid-template-columns:minmax(430px,1fr) 310px; gap:16px;
+  padding:16px 20px; max-width:1060px; margin:0 auto; }
 @media (max-width:820px) { .wrap { grid-template-columns:1fr; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; }
 .panel h2 { margin:0; padding:9px 12px; font-size:11px; font-weight:600;
   letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft);
   border-bottom:1px solid var(--line); }
-#board-panel { padding:14px; display:flex; justify-content:center; }
+#board-panel { padding:14px; display:flex; flex-direction:column; align-items:center; gap:8px; }
 #board-svg { width:100%; max-width:600px; height:auto; display:block; cursor:pointer; }
-.side { display:flex; flex-direction:column; gap:16px; }
+#legend { display:flex; gap:14px; font-size:11.5px; color:var(--ink-soft); align-items:center; }
+#legend span { display:flex; gap:5px; align-items:center; }
+#legend i { width:10px; height:10px; border-radius:50%; display:inline-block;
+  border:1px solid rgba(0,0,0,.35); }
+.side { display:flex; flex-direction:column; gap:14px; }
 .controls { padding:12px; display:flex; flex-direction:column; gap:10px; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 button, select {
@@ -42,14 +50,30 @@ button:hover { border-color:var(--ink-soft); }
 button:focus-visible, select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 button:disabled { opacity:.45; cursor:default; }
 label { font-size:12.5px; color:var(--ink-soft); }
-#status { padding:12px; font-size:14px; min-height:44px; }
+#status { padding:10px 12px; font-size:13.5px; min-height:40px; }
 #status b { color:var(--accent); }
-.evalwrap { padding:12px; }
+.evalwrap { padding:10px 12px 12px; }
+.bignums { display:flex; gap:10px; padding:10px 12px 2px; }
+.bignum { flex:1; }
+.bignum .v { font-size:20px; font-weight:650; letter-spacing:.01em; }
+.bignum .k { font-size:10.5px; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-soft); margin-top:1px; }
 .evalbar { height:12px; border-radius:6px; background:var(--stone-w);
   border:1px solid var(--line); overflow:hidden; }
-.evalbar > div { height:100%; background:var(--stone-b); width:50%; transition:width .4s; }
+.evalbar > div { height:100%; background:var(--stone-b); width:50%; transition:width .3s; }
 .evallab { display:flex; justify-content:space-between; font-size:11px;
   color:var(--ink-soft); margin-top:4px; }
+#ana-status { padding:0 12px 10px; font-size:12px; color:var(--ink-soft); min-height:18px; }
+#wrchart { width:100%; height:118px; display:block; }
+.cands { padding:6px 12px 10px; display:flex; flex-direction:column; gap:4px; }
+.cand { display:grid; grid-template-columns:14px 34px 1fr 44px 46px; gap:7px;
+  align-items:center; font-size:12.5px; }
+.cand i { width:9px; height:9px; border-radius:50%; border:1px solid rgba(0,0,0,.35); }
+.cand .bar { height:8px; background:var(--chip); border-radius:2px; overflow:hidden; }
+.cand .bar > span { display:block; height:100%; background:var(--wr); border-radius:2px; }
+.cand.head { color:var(--ink-soft); font-size:10.5px; text-transform:uppercase;
+  letter-spacing:.06em; }
+.cand.head i { visibility:hidden; }
 .toggles { padding:0 12px 12px; font-size:12.5px; color:var(--ink-soft); }
 .toggles label { display:flex; gap:6px; align-items:center; cursor:pointer; }
 .spin { display:inline-block; width:10px; height:10px; border-radius:50%;
@@ -67,57 +91,79 @@ label { font-size:12.5px; color:var(--ink-soft); }
 <div class="wrap">
   <div class="panel" id="board-panel">
     <svg id="board-svg" viewBox="0 0 640 640" role="img" aria-label="board"></svg>
+    <div id="legend">
+      <span>move quality (Δ vs best):</span>
+      <span><i style="background:var(--q0)"></i>best</span>
+      <span><i style="background:var(--q1)"></i>&minus;0.05</span>
+      <span><i style="background:var(--q2)"></i>&minus;0.15</span>
+      <span><i style="background:var(--q3)"></i>worse</span>
+    </div>
   </div>
   <div class="side">
     <div class="panel">
       <h2>Game</h2>
       <div class="controls">
         <div class="row">
-          <button id="new-black">New game — play Black</button>
-        </div>
-        <div class="row">
-          <button id="new-white">New game — play White</button>
+          <button id="new-black">New game — Black</button>
+          <button id="new-white">New game — White</button>
         </div>
         <div class="row">
           <label>engine strength</label>
           <select id="sims">
             <option value="200">fast (200 sims)</option>
             <option value="800" selected>strong (800 sims)</option>
-            <option value="2000">max (2000 sims)</option>
+            <option value="2000">stronger (2000 sims)</option>
+            <option value="5000">max (5000 sims)</option>
           </select>
+          <button id="undo">Undo</button>
         </div>
-        <div class="row"><button id="undo">Undo move</button></div>
       </div>
       <div class="toggles">
-        <label><input type="checkbox" id="t-hints"> live analysis (searches your position while ticked)</label>
-        <div id="ana-status" class="mono" style="padding-top:6px; min-height:16px;"></div>
+        <label><input type="checkbox" id="t-hints" checked> show candidate moves on board</label>
       </div>
+      <div id="status">Your move — you are <b>Black</b>. (Or pick a color above.)</div>
     </div>
     <div class="panel">
-      <h2>Status</h2>
-      <div id="status">Choose a color to start.</div>
+      <h2>Analysis</h2>
+      <div class="bignums">
+        <div class="bignum"><div class="v mono" id="wr-num">—</div><div class="k">win rate</div></div>
+        <div class="bignum"><div class="v mono" id="score-num">—</div><div class="k">score (Q)</div></div>
+      </div>
       <div class="evalwrap">
         <div class="evalbar"><div id="evalfill"></div></div>
-        <div class="evallab"><span>Black</span><span id="evaltxt" class="mono">±0.00</span><span>White</span></div>
+        <div class="evallab"><span>Black</span><span id="evaltxt" class="mono">50%</span><span>White</span></div>
       </div>
+      <div id="ana-status" class="mono"></div>
+    </div>
+    <div class="panel">
+      <h2>Win rate — Black</h2>
+      <svg id="wrchart"></svg>
+    </div>
+    <div class="panel">
+      <h2>Candidates</h2>
+      <div class="cands" id="cands"></div>
     </div>
   </div>
 </div>
 
 <script>
 "use strict";
-const B = 15, COLS = "ABCDEFGHIJKLMNO";
-const coord = a => COLS[a % B] + Math.floor(a / B);
+const B = 15, COLS = "ABCDEFGHJKLMNOP";               // Go convention: no I
+const coord = a => COLS[a % B] + (B - Math.floor(a / B));  // row 1 at the bottom
 const CELL = 40, PAD = 30, OFF = 5;
 const svgNS = "http://www.w3.org/2000/svg";
 const xy = a => [PAD + (a % B) * CELL + OFF, PAD + Math.floor(a / B) * CELL + OFF];
 
 let moves = [];          // full game, black first
 let human = 0;           // 0 black, 1 white
-let busy = false, over = false;
-let anaData = null, anaGen = 0;   // live analysis state
+let over = false;
+let gen = 0;             // driver generation; bump to cancel the running loop
+let ana = null;          // latest /api/analyze payload for the current position
+let anaKey = null;       // moves.join(",") the payload belongs to
+let evalHist = [0.5];    // evalHist[k] = black win rate after k moves
 
-const svg = document.getElementById("board-svg");
+const $ = id => document.getElementById(id);
+const svg = $("board-svg");
 function el(tag, attrs, parent) {
   const e = document.createElementNS(svgNS, tag);
   for (const k in attrs) e.setAttribute(k, attrs[k]);
@@ -131,24 +177,42 @@ for (let i = 0; i < B; i++) {
   const t1 = el("text", { x:q, y:20, "text-anchor":"middle", "font-size":11, fill:"var(--wood-line)" }, svg);
   t1.textContent = COLS[i];
   const t2 = el("text", { x:16, y:q+4, "text-anchor":"middle", "font-size":11, fill:"var(--wood-line)" }, svg);
-  t2.textContent = i;
+  t2.textContent = B - i;
 }
 for (const [r,c] of [[3,3],[3,11],[7,7],[11,3],[11,11]])
   el("circle", { cx:PAD+c*CELL+OFF, cy:PAD+r*CELL+OFF, r:3.4, fill:"var(--wood-line)" }, svg);
 const dyn = el("g", {}, svg);
 
+// ---------- move quality ----------
+const wrPct = q => ((1 + q) / 2 * 100);               // Q (mover view) -> win %
+function qColor(dq) {          // dq = bestQ - q, in [0, 2]
+  if (dq <= 0.04) return ["var(--q0)", "#fff"];
+  if (dq <= 0.12) return ["var(--q1)", "var(--q1-ink)"];
+  if (dq <= 0.30) return ["var(--q2)", "#fff"];
+  return ["var(--q3)", "#fff"];
+}
+
 function draw() {
   dyn.innerHTML = "";
-  const hints = document.getElementById("t-hints").checked;
-  if (hints && anaData && anaData.top && !over) {
-    for (const [a, pr] of anaData.top) {
-      if (moves.includes(a) || pr < 0.02) continue;
+  const showHints = $("t-hints").checked && anaKey === moves.join(",");
+  if (showHints && ana && ana.top && !over) {
+    const bestQ = ana.top.length ? ana.top[0][2] : 0;
+    ana.top.forEach(([a, pr, q], k) => {
+      if (moves.includes(a) || pr < 0.015) return;
       const [x, y] = xy(a);
-      el("circle", { cx:x, cy:y, r:6+11*Math.sqrt(pr), fill:"var(--accent)", opacity:0.25 }, dyn);
-      const t = el("text", { x, y:y-14, "text-anchor":"middle", "font-size":10.5,
-                             fill:"var(--accent)", "font-weight":700 }, dyn);
-      t.textContent = (pr * 100).toFixed(0) + "%";
-    }
+      const [fill, ink] = qColor(bestQ - q);
+      const r = 8 + 9.5 * Math.sqrt(pr);
+      const c = el("circle", { cx:x, cy:y, r, fill, opacity:0.92,
+        stroke: k === 0 ? "var(--ink)" : "rgba(0,0,0,.35)",
+        "stroke-width": k === 0 ? 2 : 1 }, dyn);
+      const tip = el("title", {}, c);
+      tip.textContent = `${coord(a)} — win ${wrPct(q).toFixed(1)}% · Q ${q >= 0 ? "+" : ""}${q.toFixed(2)} · ${(pr*100).toFixed(0)}% of visits`;
+      if (pr >= 0.04) {
+        const t = el("text", { x, y:y+3.5, "text-anchor":"middle", "font-size":r >= 13 ? 10.5 : 9,
+                               fill:ink, "font-weight":700, "pointer-events":"none" }, dyn);
+        t.textContent = wrPct(q).toFixed(0);
+      }
+    });
   }
   moves.forEach((a, i) => {
     const [x, y] = xy(a), p = i % 2;
@@ -164,83 +228,171 @@ function draw() {
   }
 }
 
-function setStatus(html) { document.getElementById("status").innerHTML = html; }
-function setEval(qBlack) {  // -1..1 from black's perspective
-  const pct = 50 + qBlack * 50;
-  document.getElementById("evalfill").style.width = pct + "%";
-  document.getElementById("evaltxt").textContent = (qBlack >= 0 ? "+" : "") + qBlack.toFixed(2);
+// ---------- side panel ----------
+function setStatus(html) { $("status").innerHTML = html; }
+function fmtSide(wrB) {   // black win rate 0..1 -> "B 64.2%" / "W 55.0%"
+  return wrB >= 0.5 ? `B ${(wrB*100).toFixed(1)}%` : `W ${((1-wrB)*100).toFixed(1)}%`;
+}
+function setEval(wrB, vB) {
+  $("evalfill").style.width = (wrB * 100) + "%";
+  $("evaltxt").textContent = fmtSide(wrB);
+  $("wr-num").textContent = fmtSide(wrB);
+  $("score-num").textContent = vB >= 0 ? `B+${vB.toFixed(2)}` : `W+${(-vB).toFixed(2)}`;
+}
+
+function drawCands() {
+  const div = $("cands");
+  div.innerHTML = "";
+  if (!ana || anaKey !== moves.join(",") || !ana.top || over) {
+    div.innerHTML = '<span style="color:var(--ink-soft);font-size:12px">—</span>'; return;
+  }
+  const head = document.createElement("div");
+  head.className = "cand head";
+  head.innerHTML = "<i></i><span>move</span><span>visits</span><span>win</span><span>Q</span>";
+  div.appendChild(head);
+  const bestQ = ana.top.length ? ana.top[0][2] : 0;
+  for (const [a, pr, q] of ana.top) {
+    if (pr < 0.01) continue;
+    const row = document.createElement("div");
+    row.className = "cand mono";
+    row.innerHTML = `<i style="background:${qColor(bestQ - q)[0]}"></i>` +
+      `<span>${coord(a)}</span>` +
+      `<span class="bar"><span style="width:${(pr*100).toFixed(1)}%"></span></span>` +
+      `<span>${wrPct(q).toFixed(1)}%</span>` +
+      `<span>${q >= 0 ? "+" : ""}${q.toFixed(2)}</span>`;
+    div.appendChild(row);
+  }
+}
+
+// ---------- win-rate chart ----------
+const chart = $("wrchart");
+let chartHover = null;   // hovered ply or null
+function drawChart() {
+  chart.innerHTML = "";
+  const W = chart.clientWidth || 300, H = 118;
+  chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pl = 26, pr = 8, pt = 10, pb = 16;
+  const n = Math.max(evalHist.length - 1, 20);
+  const X = i => pl + (W - pl - pr) * i / n;
+  const Y = wr => pt + (1 - wr) * (H - pt - pb);
+  el("line", { x1:pl, y1:Y(0.5), x2:W-pr, y2:Y(0.5), stroke:"var(--line)",
+               "stroke-dasharray":"4 3" }, chart);
+  for (const [wr, lab] of [[1, "B"], [0.5, "50%"], [0, "W"]]) {
+    const t = el("text", { x:pl-5, y:Y(wr)+3.5, "text-anchor":"end", "font-size":9.5,
+                           fill:"var(--ink-soft)" }, chart);
+    t.textContent = lab;
+  }
+  for (let m = 10; m <= n; m += 10) {
+    el("line", { x1:X(m), y1:Y(0.5)-2, x2:X(m), y2:Y(0.5)+2, stroke:"var(--ink-soft)" }, chart);
+    const t = el("text", { x:X(m), y:H-4, "text-anchor":"middle", "font-size":9,
+                           fill:"var(--ink-soft)" }, chart);
+    t.textContent = m;
+  }
+  const pts = [];
+  evalHist.forEach((wr, i) => { if (wr != null) pts.push([X(i), Y(wr), i, wr]); });
+  if (pts.length > 1)
+    el("polyline", { points: pts.map(p => `${p[0]},${p[1]}`).join(" "),
+      fill:"none", stroke:"var(--wr)", "stroke-width":2, "stroke-linejoin":"round" }, chart);
+  if (pts.length) {
+    const lp = pts[pts.length - 1];
+    el("circle", { cx:lp[0], cy:lp[1], r:3.5, fill:"var(--wr)" }, chart);
+  }
+  if (chartHover != null && evalHist[chartHover] != null) {
+    const hx = X(chartHover), hy = Y(evalHist[chartHover]);
+    el("line", { x1:hx, y1:pt, x2:hx, y2:H-pb, stroke:"var(--ink-soft)", opacity:.5 }, chart);
+    el("circle", { cx:hx, cy:hy, r:4, fill:"none", stroke:"var(--ink)", "stroke-width":1.5 }, chart);
+    const t = el("text", { x:Math.min(Math.max(hx, pl+30), W-40), y:pt+2,
+      "text-anchor":"middle", "font-size":10, fill:"var(--ink)", "font-weight":600 }, chart);
+    t.textContent = `move ${chartHover} · ${fmtSide(evalHist[chartHover])}`;
+  }
+  const cap = el("rect", { x:0, y:0, width:W, height:H, fill:"transparent" }, chart);
+  cap.addEventListener("mousemove", ev => {
+    const r = chart.getBoundingClientRect();
+    const i = Math.round(((ev.clientX - r.left) / r.width * W - pl) / (W - pl - pr) * n);
+    const h = (i >= 0 && i < evalHist.length) ? i : null;
+    if (h !== chartHover) { chartHover = h; drawChart(); }
+  });
+  cap.addEventListener("mouseleave", () => { chartHover = null; drawChart(); });
+}
+
+// ---------- game driver ----------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function post(path, body) {
+  const r = await fetch(path, { method:"POST",
+    headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+function recordEval(wrB) {
+  evalHist[moves.length] = wrB;
+  evalHist.length = moves.length + 1;
+  drawChart();
 }
 
 function finish(winner) {
   over = true;
-  if (winner === -1) setStatus("<b>Draw</b> — full board.");
+  if (winner === -1) { setStatus("<b>Draw</b> — full board."); recordEval(0.5); }
   else {
-    const you = winner === human;
-    setStatus(you ? "<b>You win!</b> Five in a row." :
+    setStatus(winner === human ? "<b>You win!</b> Five in a row." :
       `<b>Engine wins</b> — five in a row (${winner === 0 ? "Black" : "White"}).`);
-    setEval(winner === 0 ? 1 : -1);
+    recordEval(winner === 0 ? 1 : 0);
+    setEval(winner === 0 ? 1 : 0, winner === 0 ? 1 : -1);
   }
+  draw();
 }
 
-function humanTurn() { return !busy && !over && moves.length % 2 === human; }
+async function driver() {
+  const g = ++gen;
+  while (g === gen && !over) {
+    const engineTurn = moves.length % 2 !== human;
+    const target = +$("sims").value;
+    const key = moves.join(",");
+    const ready = anaKey === key && ana && ana.sims >= target;
 
-async function analysisLoop() {
-  const myGen = ++anaGen;
-  const box = document.getElementById("t-hints");
-  const st = document.getElementById("ana-status");
-  while (box.checked && humanTurn()) {
-    const snap = moves.length;
+    if (engineTurn && ready) {                       // play from the analysed tree
+      let j;
+      try { j = await post("/api/move", { moves, sims: target }); }
+      catch (e) { setStatus("connection error — retrying"); await sleep(1000); continue; }
+      if (g !== gen) return;
+      if (j.error) { setStatus("Error: " + j.error); return; }
+      if (j.move !== undefined) {
+        const ec = moves.length % 2;
+        moves.push(j.move);
+        recordEval(ec === 0 ? (1 + j.q) / 2 : (1 - j.q) / 2);
+        draw();
+        if (j.winner !== undefined) { finish(j.winner); return; }
+        setStatus(`Engine played <b class="mono">${coord(j.move)}</b> · your move.`);
+      } else if (j.winner !== undefined) { finish(j.winner); return; }
+      continue;
+    }
+
+    if (!engineTurn && anaKey === key && ana && ana.sims >= ana.cap) return; // idle at cap
+
     let j;
-    try {
-      const r = await fetch("/api/analyze", { method:"POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ moves, chunk: 250 }) });
-      j = await r.json();
-    } catch (e) { st.textContent = "analysis: connection error"; return; }
-    if (myGen !== anaGen || snap !== moves.length || !box.checked) return;
-    if (j.error || j.winner !== undefined) return;
-    anaData = j;
+    try { j = await post("/api/analyze", { moves, chunk: 250 }); }
+    catch (e) { setStatus("connection error — retrying"); await sleep(1000); continue; }
+    if (g !== gen || key !== moves.join(",")) continue;
+    if (j.error) { setStatus("Error: " + j.error); return; }
+    if (j.winner !== undefined) { finish(j.winner); return; }
+    ana = j; anaKey = key;
+    const vB = j.player === 0 ? j.value : -j.value;
+    const wrB = (1 + vB) / 2;
+    setEval(wrB, vB);
+    recordEval(wrB);
+    drawCands();
     draw();
     const best = j.top[0];
-    const vb = j.player === 0 ? j.value : -j.value;   // black's perspective
-    setEval(vb);
-    st.textContent = `${j.sims.toLocaleString()} sims · best ${coord(best[0])} ` +
-      `${(best[1]*100).toFixed(0)}% (Q ${best[2] >= 0 ? "+" : ""}${best[2].toFixed(2)})`;
-    if (j.sims >= j.cap) { st.textContent += " · max depth"; return; }
+    $("ana-status").textContent = `${j.sims.toLocaleString()} sims · ` +
+      `best ${coord(best[0])} (${(best[1]*100).toFixed(0)}% of visits)`;
+    if (engineTurn)
+      setStatus(`Engine thinking&hellip; <span class="mono">${j.sims.toLocaleString()} / ` +
+        `${target.toLocaleString()}</span> sims <span class="spin"></span>`);
   }
 }
-function stopAnalysis() {
-  anaGen++; anaData = null;
-  document.getElementById("ana-status").textContent = "";
-}
 
-async function engineTurn() {
-  busy = true;
-  setStatus('Engine thinking&hellip; <span class="spin"></span>');
-  try {
-    const r = await fetch("/api/move", { method:"POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ moves, sims:+document.getElementById("sims").value }) });
-    const j = await r.json();
-    if (j.error) { setStatus("Error: " + j.error); busy = false; return; }
-    if (j.move !== undefined) {
-      const engineColor = moves.length % 2;
-      moves.push(j.move);
-      draw();
-      const qb = engineColor === 0 ? j.q : -j.q;
-      setEval(qb);
-      if (j.winner !== undefined) { finish(j.winner); }
-      else setStatus(`Engine played <b class="mono">${coord(j.move)}</b> · ` +
-        `engine eval <span class="mono">${j.q >= 0 ? "+" : ""}${j.q.toFixed(2)}</span> for itself · your move.`);
-    } else if (j.winner !== undefined) { draw(); finish(j.winner); }
-  } catch (e) { setStatus("Connection error: " + e); }
-  busy = false;
-  if (document.getElementById("t-hints").checked && humanTurn()) analysisLoop();
-}
-
+// ---------- input ----------
 svg.addEventListener("click", ev => {
-  if (busy || over) return;
-  if (moves.length % 2 !== human) return;
+  if (over || moves.length % 2 !== human) return;
   const pt = svg.createSVGPoint();
   pt.x = ev.clientX; pt.y = ev.clientY;
   const q = pt.matrixTransform(svg.getScreenCTM().inverse());
@@ -248,42 +400,41 @@ svg.addEventListener("click", ev => {
   if (c < 0 || c >= B || r < 0 || r >= B) return;
   const a = r * B + c;
   if (moves.includes(a)) return;
-  stopAnalysis();
   moves.push(a);
-  draw();
-  // did the human just win / draw? the server tells us on the engine call
-  engineTurn();
+  evalHist.length = moves.length;   // eval for the new position comes from analysis
+  draw(); drawChart();
+  driver();
 });
 
 function newGame(color) {
-  moves = []; human = color; over = false; busy = false;
-  stopAnalysis();
-  draw(); setEval(0);
-  if (human === 1) engineTurn();
-  else {
-    setStatus("Your move — you are <b>Black</b>.");
-    if (document.getElementById("t-hints").checked) analysisLoop();
-  }
+  moves = []; human = color; over = false;
+  ana = null; anaKey = null; evalHist = [0.5]; chartHover = null;
+  draw(); drawChart(); drawCands();
+  setEval(0.5, 0);
+  $("ana-status").textContent = "";
+  setStatus(color === 0 ? "Your move — you are <b>Black</b>." :
+    "You are <b>White</b> — engine opens.");
+  driver();
 }
-document.getElementById("new-black").onclick = () => newGame(0);
-document.getElementById("new-white").onclick = () => newGame(1);
-document.getElementById("undo").onclick = () => {
-  if (busy) return;
-  // pop back to the human's previous turn
-  const n = over ? 1 : 2;
-  for (let i = 0; i < n && moves.length; i++) moves.pop();
+$("new-black").onclick = () => newGame(0);
+$("new-white").onclick = () => newGame(1);
+$("undo").onclick = () => {
+  if (!moves.length) return;
+  moves.pop();
   while (moves.length && moves.length % 2 !== human) moves.pop();
   over = false;
-  stopAnalysis();
-  draw(); setStatus("Your move.");
-  if (document.getElementById("t-hints").checked) analysisLoop();
+  ana = null; anaKey = null;
+  evalHist.length = moves.length + 1;
+  draw(); drawChart(); drawCands();
+  setStatus("Your move.");
+  driver();
 };
-document.getElementById("t-hints").onchange = () => {
-  if (document.getElementById("t-hints").checked) { if (humanTurn()) analysisLoop(); }
-  else stopAnalysis();
-  draw();
-};
-draw();
+$("t-hints").onchange = draw;
+window.addEventListener("resize", drawChart);
+
+draw(); drawChart();
+setEval(0.5, 0);
+driver();          // analyse the empty board so first-move hints appear
 </script>
 </body>
 </html>

@@ -27,13 +27,29 @@ def load_net(path, channels=64, blocks=6):
 
 
 @torch.inference_mode()
-def arena(net_a, net_b, games=128, sims=200, temp_moves=4, seed=0):
-    """Returns (wins_a, draws, wins_b). Slot g: A plays black iff g even."""
+def arena(net_a, net_b, games=128, sims=200, temp_moves=4, seed=0, open_stones=0):
+    """Returns (wins_a, draws, wins_b). Slot g: A plays black iff g even.
+
+    open_stones > 0: seed each PAIR of slots (2k, 2k+1) with the same random
+    opening (alternating colors, even count keeps black to move) and set
+    temp_moves=0 — position-diverse, color-paired, fully greedy games. This
+    discriminates strength better than temperature sampling, which in gomoku
+    turns into a tactical lottery that punishes nuanced nets.
+    """
     torch.manual_seed(seed)
     G = games
     boards = torch.zeros(G, 2, A, device=DEV)
     player = torch.zeros(G, dtype=torch.long, device=DEV)
     last = torch.full((G,), -1, dtype=torch.long, device=DEV)
+    if open_stones > 0:
+        temp_moves = 0
+        k = open_stones - (open_stones % 2)  # even count: black still to move
+        for g0 in range(0, G - 1, 2):
+            cells = torch.randperm(A)[:k]
+            for i in range(k):
+                boards[g0, i % 2, cells[i]] = 1.0
+                boards[g0 + 1, i % 2, cells[i]] = 1.0
+            last[g0] = last[g0 + 1] = int(cells[-1])
     done = torch.zeros(G, dtype=torch.bool, device=DEV)
     winner = torch.full((G,), -1, dtype=torch.long, device=DEV)  # 0 black, 1 white, -1 draw
     ar = torch.arange(G, device=DEV)

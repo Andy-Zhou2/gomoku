@@ -75,7 +75,15 @@ python make_viewer.py runs/az3/games.jsonl -o viewer_built.html --last 120
 ```
 
 Open `viewer.html` in a browser and load any run's `games.jsonl` to replay
-rollouts with policy overlays, eval charts, and rule-based commentary.
+rollouts with policy overlays, win-rate charts, rule-based commentary, and
+per-game SGF export (`GM[4]`, opens in standard Go tools). Both the viewer and
+the play GUI use Go-style coordinates (columns A–P skipping I, row 1 at the
+bottom).
+
+The play GUI analyses continuously (KaTrain-style): live win rate and Q
+"score", a win-rate curve over the game, and board candidates coloured by
+move quality (Δ vs the engine's best). The engine's move is played from the
+same analysis tree once it reaches the selected depth, so you watch it think.
 
 ## Training dynamics: the capitulation collapse and its fixes
 

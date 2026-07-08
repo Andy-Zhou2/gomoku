@@ -60,12 +60,21 @@ def handle_move(req):
     if winner is not None:
         return {"winner": winner, "moves": moves}
 
-    mcts = get_mcts(sims)
-    last = torch.tensor([moves[-1] if moves else -1], device=DEV)
-    pl = torch.tensor([player], device=DEV)
-    pi = mcts.run(boards, pl, last, add_noise=False)
+    # If the analysis tree already covers this position at >= the requested
+    # depth, play from it (instant — the client streams the thinking instead).
+    if ANA["key"] == tuple(moves) and ANA["mcts"] is not None \
+            and ANA["mcts"].sims_done >= sims:
+        m = ANA["mcts"]
+        visits = m.Nsa[0, 0]
+        pi = (visits / visits.sum().clamp(min=1.0)).unsqueeze(0)
+        q_all = m.Wsa[0, 0] / visits.clamp(min=1.0)
+    else:
+        mcts = get_mcts(sims)
+        last = torch.tensor([moves[-1] if moves else -1], device=DEV)
+        pl = torch.tensor([player], device=DEV)
+        pi = mcts.run(boards, pl, last, add_noise=False)
+        q_all = mcts.Wsa[0, 0] / mcts.Nsa[0, 0].clamp(min=1.0)
     a = int(pi[0].argmax())
-    q_all = mcts.Wsa[0, 0] / mcts.Nsa[0, 0].clamp(min=1.0)
     topv, topi = pi[0].topk(5)
     resp = {
         "move": a,
@@ -85,7 +94,7 @@ def handle_analyze(req):
     """Continuous analysis of the current position: keeps one persistent tree
     per position and deepens it by `chunk` sims per call."""
     moves = [int(a) for a in req.get("moves", [])]
-    chunk = max(50, min(int(req.get("chunk", 250)), 2000))
+    chunk = max(32, min(int(req.get("chunk", 250)), 2000))
     boards, player, winner, err = game_state(moves)
     if err:
         return {"error": err}
@@ -107,12 +116,12 @@ def handle_analyze(req):
     tot = float(visits.sum())
     pi = visits / max(tot, 1.0)
     q_all = m.Wsa[0, 0] / visits.clamp(min=1.0)
-    topv, topi = pi.topk(8)
+    topv, topi = pi.topk(10)
     value = float(m.Wsa[0, 0].sum()) / max(tot, 1.0)  # perspective: player to move
     return {
         "sims": m.sims_done, "cap": ANALYSIS_CAP, "player": player,
         "value": round(value, 3),
-        "top": [[int(i), round(float(v), 4), round(float(q_all[i]), 3)]
+        "top": [[int(i), round(float(v), 4), round(float(q_all[i]), 3), int(visits[i])]
                 for v, i in zip(topv, topi) if v > 0.001],
     }
 

@@ -134,6 +134,7 @@ header label:hover { border-color: var(--ink-soft); }
       <button id="b-play" title="autoplay (space)">&#9654;</button>
       <button id="b-next" title="next (→)">&#8594;</button>
       <button id="b-last" title="last move">&#8594;|</button>
+      <button id="b-sgf" title="download this game as SGF (GM[4])">SGF</button>
       <span id="pos" class="mono"></span>
     </div>
     <div class="toggles">
@@ -144,7 +145,7 @@ header label:hover { border-color: var(--ink-soft); }
 
   <div class="an">
     <div class="panel">
-      <h2>Root value (Black's view)</h2>
+      <h2>Win rate — Black (root value)</h2>
       <svg id="evalchart"></svg>
       <div class="stat-row mono" id="stats"></div>
     </div>
@@ -165,8 +166,8 @@ __GAMES__
 
 <script>
 "use strict";
-const B = 15, COLS = "ABCDEFGHIJKLMNO";
-const coord = a => COLS[a % B] + Math.floor(a / B);
+const B = 15, COLS = "ABCDEFGHJKLMNOP";               // Go convention: no I
+const coord = a => COLS[a % B] + (B - Math.floor(a / B));  // row 1 at the bottom
 const names = ["Black", "White"];
 
 // ---------- data ----------
@@ -320,7 +321,7 @@ function drawBoardBase(svg) {
     const t1 = el("text", { x: q, y: 20, "text-anchor": "middle", "font-size": 11, fill: "var(--wood-line)" }, svg);
     t1.textContent = COLS[i];
     const t2 = el("text", { x: 16, y: q + 4, "text-anchor": "middle", "font-size": 11, fill: "var(--wood-line)" }, svg);
-    t2.textContent = i;
+    t2.textContent = B - i;
   }
   for (const [r, c] of [[3, 3], [3, 11], [7, 7], [11, 3], [11, 11]])
     el("circle", { cx: PAD + c * CELL + 5, cy: PAD + r * CELL + 5, r: 3.4, fill: "var(--wood-line)" }, svg);
@@ -390,11 +391,13 @@ function drawEval() {
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const X = i => 8 + (W - 16) * (n <= 1 ? 0 : i / (n - 1));
   const Y = v => H / 2 - v * (H / 2 - 10);
-  el("line", { x1: 8, y1: H / 2, x2: W - 8, y2: H / 2, stroke: "var(--line)", "stroke-width": 1 }, svg);
+  el("line", { x1: 8, y1: H / 2, x2: W - 8, y2: H / 2, stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "4 3" }, svg);
   const lbl = el("text", { x: W - 10, y: 14, "text-anchor": "end", "font-size": 9.5, fill: "var(--ink-soft)" }, svg);
-  lbl.textContent = "+1 Black";
+  lbl.textContent = "B 100%";
   const lbl2 = el("text", { x: W - 10, y: H - 6, "text-anchor": "end", "font-size": 9.5, fill: "var(--ink-soft)" }, svg);
-  lbl2.textContent = "-1 White";
+  lbl2.textContent = "W 100%";
+  const lbl3 = el("text", { x: 10, y: H / 2 - 3, "font-size": 9.5, fill: "var(--ink-soft)" }, svg);
+  lbl3.textContent = "50%";
   const pts = g.moves.map((m, i) => `${X(i)},${Y(vBlack(m))}`).join(" ");
   el("polyline", { points: pts, fill: "none", stroke: "var(--accent)", "stroke-width": 1.8 }, svg);
   if (mi > 0) {
@@ -445,9 +448,10 @@ function drawStats() {
   const s = document.getElementById("stats");
   if (mi === 0) { s.innerHTML = `<span>iter <b>${g.iter}</b></span><span>${g.length} moves</span>`; return; }
   const m = g.moves[mi - 1];
+  const wrB = (1 + vBlack(m)) / 2;
   s.innerHTML = `<span>iter <b>${g.iter}</b></span>` +
     `<span>Q(move) <b>${m.q.toFixed(2)}</b></span>` +
-    `<span>root V <b>${vBlack(m).toFixed(2)}</b> (Black)</span>`;
+    `<span>win <b>${wrB >= 0.5 ? "B" : "W"} ${((wrB >= 0.5 ? wrB : 1 - wrB) * 100).toFixed(0)}%</b> (V ${vBlack(m).toFixed(2)})</span>`;
 }
 
 // ---------- game list ----------
@@ -477,6 +481,70 @@ function selectGame(i) {
   buildList();
   drawPosition();
 }
+
+// ---------- SGF export (GM[4] = gomoku, standard Go tooling format) ----------
+function toSGF(g) {
+  const L = "abcdefghijklmno";
+  const sc = a => L[a % B] + L[Math.floor(a / B)];
+  let s = `(;GM[4]FF[4]CA[UTF-8]SZ[${B}]PB[selfplay]PW[selfplay]` +
+    `GN[iter ${g.iter}]RE[${g.winner === 0 ? "B+" : g.winner === 1 ? "W+" : "Draw"}]`;
+  const ab = (g.open || []).filter(([, p]) => p === 0).map(([a]) => `[${sc(a)}]`).join("");
+  const aw = (g.open || []).filter(([, p]) => p === 1).map(([a]) => `[${sc(a)}]`).join("");
+  if (ab) s += "AB" + ab;
+  if (aw) s += "AW" + aw;
+  for (const m of g.moves)
+    s += `;${m.p === 0 ? "B" : "W"}[${sc(m.a)}]C[V(black) ${vBlack(m).toFixed(2)} · Q ${m.q.toFixed(2)}]`;
+  return s + ")";
+}
+function showSGF(text, fname) {
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;" +
+    "align-items:center;justify-content:center;z-index:10;padding:20px;";
+  const box = document.createElement("div");
+  box.className = "panel";
+  box.style.cssText = "max-width:640px;width:100%;display:flex;flex-direction:column;gap:10px;padding:14px;";
+  box.innerHTML = `<div style="display:flex;align-items:baseline;gap:10px;">
+      <b>${fname}</b>
+      <span style="color:var(--ink-soft);font-size:12px;">downloads are blocked in this
+      embedded page — copy the SGF instead</span></div>
+    <textarea readonly class="mono" style="width:100%;height:180px;resize:vertical;
+      background:var(--ground);color:var(--ink);border:1px solid var(--line);
+      border-radius:4px;padding:8px;font-size:11.5px;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button class="g-item" style="flex:0;border:1px solid var(--line);border-radius:4px;" id="sgf-copy">Copy</button>
+      <button class="g-item" style="flex:0;border:1px solid var(--line);border-radius:4px;" id="sgf-close">Close</button>
+    </div>`;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  const ta = box.querySelector("textarea");
+  ta.value = text;
+  ta.focus(); ta.select();
+  const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
+  const esc = e => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc);
+  ov.onclick = e => { if (e.target === ov) close(); };
+  box.querySelector("#sgf-close").onclick = close;
+  box.querySelector("#sgf-copy").onclick = () => {
+    ta.select();
+    const done = () => { box.querySelector("#sgf-copy").textContent = "Copied ✓"; };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {
+      document.execCommand("copy"); done();
+    });
+    else { document.execCommand("copy"); done(); }
+  };
+}
+document.getElementById("b-sgf").onclick = () => {
+  const g = games[gi];
+  if (!g) { document.getElementById("pos").textContent = "no game loaded"; return; }
+  const text = toSGF(g);
+  const fname = `gomoku_iter${g.iter}_game${gi + 1}.sgf`;
+  if (window.self !== window.top) { showSGF(text, fname); return; }  // sandboxed iframe: downloads blocked
+  const url = URL.createObjectURL(new Blob([text], { type: "application/x-go-sgf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 
 // ---------- transport ----------
 function step(d) { mi = Math.max(0, Math.min(games[gi].moves.length, mi + d)); drawPosition(); }
