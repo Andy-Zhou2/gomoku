@@ -38,6 +38,8 @@ class BatchedMCTS:
         self.q_filter = q_filter
         self.q_margin = q_margin
         self.root_P = None
+        self.probe_mask = None   # (G,A) bool: root actions with a forced visit quota
+        self.probe_min = 0
 
         G, N = num_games, sims + 2
         self.Nmax = N
@@ -80,8 +82,17 @@ class BatchedMCTS:
         return self.policy_target()
 
     @torch.inference_mode()
-    def start(self, boards, player, last, add_noise=True):
-        """Reset trees and expand the root. Follow with advance(k) calls."""
+    def start(self, boards, player, last, add_noise=True, boost=None, boost_min=48):
+        """Reset trees and expand the root. Follow with advance(k) calls.
+
+        boost: optional (G,A) bool mask of actions that must get a genuine
+        readout even if the network doesn't favor them (e.g. user-marked
+        "probe" points). Unlike raising their prior — which a bad-looking Q
+        can still starve of visits after the very first one — this gives
+        them an unconditional forced quota (like `forced_playouts`, but
+        user-selected rather than every legal move), so their Q ends up
+        backed by boost_min real simulations rather than a single NN guess.
+        """
         self.P.zero_(); self.Nsa.zero_(); self.Wsa.zero_()
         self.children.fill_(-1)
         self.is_term.zero_(); self.term_val.zero_()
@@ -95,6 +106,8 @@ class BatchedMCTS:
             noise = noise / noise.sum(-1, keepdim=True).clamp(min=1e-8)
             pri = (1 - self.eps) * pri + self.eps * noise
         self.P[:, 0] = pri
+        self.probe_mask = boost
+        self.probe_min = boost_min
         self.root_P = pri
         self._root = (boards.clone(), player.clone(), last.clone(),
                       boards.sum((1, 2)).long())
@@ -152,6 +165,11 @@ class BatchedMCTS:
                 forced_n = (2.0 * self.root_P * n.sum(-1, keepdim=True)).sqrt()
                 need = lm & (n < forced_n)
                 score = torch.where(need, 1e9 * (1.0 + self.root_P), score)
+            if self.probe_mask is not None and depth == 0:
+                # user-marked points: force a flat minimum visit quota so their
+                # Q reflects real search rather than a single NN guess
+                need = lm & self.probe_mask & (n < self.probe_min)
+                score = torch.where(need, torch.full_like(score, 1e9), score)
             # tiny random tie-break: near-equal candidates (fresh nodes) would
             # otherwise argmax to a fixed cell and self-reinforce
             score += torch.rand_like(score) * 1e-4

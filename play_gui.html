@@ -31,6 +31,7 @@ header .sub { color:var(--ink-soft); font-size:12.5px; }
   padding:16px 20px; max-width:1060px; margin:0 auto; }
 @media (max-width:820px) { .wrap { grid-template-columns:1fr; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; }
+.panel.hidden { display:none; }
 .panel h2 { margin:0; padding:9px 12px; font-size:11px; font-weight:600;
   letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft);
   border-bottom:1px solid var(--line); }
@@ -40,6 +41,18 @@ header .sub { color:var(--ink-soft); font-size:12.5px; }
 #legend span { display:flex; gap:5px; align-items:center; }
 #legend i { width:10px; height:10px; border-radius:50%; display:inline-block;
   border:1px solid rgba(0,0,0,.35); }
+.movelist { display:flex; gap:4px; overflow-x:auto; width:100%; max-width:600px;
+  padding:2px 0; }
+.movelist:empty { display:none; }
+.branches { display:none; align-items:center; gap:4px; overflow-x:auto; width:100%;
+  max-width:600px; padding:2px 0; }
+.branches .lab { font-size:11px; color:var(--ink-soft); white-space:nowrap; }
+button.mv { font:600 11px/1 ui-monospace, monospace; padding:4px 7px; flex:0 0 auto;
+  background:var(--chip); color:var(--ink-soft); border:1px solid var(--line);
+  border-radius:4px; cursor:pointer; }
+button.mv:hover { border-color:var(--ink-soft); color:var(--ink); }
+button.mv.cur { background:var(--accent); border-color:var(--accent); color:#fff; }
+button.toggle-on { background:var(--accent); border-color:var(--accent); color:#fff; }
 .side { display:flex; flex-direction:column; gap:14px; }
 .controls { padding:12px; display:flex; flex-direction:column; gap:10px; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -64,7 +77,7 @@ label { font-size:12.5px; color:var(--ink-soft); }
 .evallab { display:flex; justify-content:space-between; font-size:11px;
   color:var(--ink-soft); margin-top:4px; }
 #ana-status { padding:0 12px 10px; font-size:12px; color:var(--ink-soft); min-height:18px; }
-#wrchart { width:100%; height:118px; display:block; }
+#wrchart { width:100%; height:118px; display:block; cursor:pointer; }
 .cands { padding:6px 12px 10px; display:flex; flex-direction:column; gap:4px; }
 .cand { display:grid; grid-template-columns:14px 34px 1fr 44px 46px; gap:7px;
   align-items:center; font-size:12.5px; }
@@ -74,7 +87,10 @@ label { font-size:12.5px; color:var(--ink-soft); }
 .cand.head { color:var(--ink-soft); font-size:10.5px; text-transform:uppercase;
   letter-spacing:.06em; }
 .cand.head i { visibility:hidden; }
-.toggles { padding:0 12px 12px; font-size:12.5px; color:var(--ink-soft); }
+.cand i.sq { border-radius:2px; }
+.probe-hint { padding:0 12px 8px; font-size:11.5px; color:var(--ink-soft); }
+.toggles { padding:0 12px 12px; font-size:12.5px; color:var(--ink-soft);
+  display:flex; flex-direction:column; gap:6px; }
 .toggles label { display:flex; gap:6px; align-items:center; cursor:pointer; }
 .spin { display:inline-block; width:10px; height:10px; border-radius:50%;
   border:2px solid var(--ink-soft); border-top-color:transparent;
@@ -98,6 +114,8 @@ label { font-size:12.5px; color:var(--ink-soft); }
       <span><i style="background:var(--q2)"></i>&minus;0.15</span>
       <span><i style="background:var(--q3)"></i>worse</span>
     </div>
+    <div id="movelist" class="movelist mono"></div>
+    <div id="branches" class="branches mono"></div>
   </div>
   <div class="side">
     <div class="panel">
@@ -108,6 +126,27 @@ label { font-size:12.5px; color:var(--ink-soft); }
           <button id="new-white">New game — White</button>
         </div>
         <div class="row">
+          <button id="t-setup-mode" title="Freely place black/white stones, in any order, to build a custom position">Set up position&hellip;</button>
+        </div>
+        <div id="setup-panel" style="display:none">
+          <div class="row">
+            <button id="setup-black" class="toggle-on">&#9679; Black</button>
+            <button id="setup-white">&#9675; White</button>
+            <button id="setup-erase">Erase</button>
+            <button id="setup-clear">Clear all</button>
+          </div>
+          <div class="row">
+            <label>next to move</label>
+            <button id="setup-first-black" class="toggle-on">Black</button>
+            <button id="setup-first-white">White</button>
+          </div>
+          <div class="row">
+            <button id="setup-start-black">Start &mdash; I'm Black</button>
+            <button id="setup-start-white">Start &mdash; I'm White</button>
+            <button id="setup-cancel">Cancel</button>
+          </div>
+        </div>
+        <div class="row">
           <label>engine strength</label>
           <select id="sims">
             <option value="200">fast (200 sims)</option>
@@ -115,15 +154,43 @@ label { font-size:12.5px; color:var(--ink-soft); }
             <option value="2000">stronger (2000 sims)</option>
             <option value="5000">max (5000 sims)</option>
           </select>
-          <button id="undo">Undo</button>
+        </div>
+        <div class="row" style="align-items:center">
+          <label title="Which checkpoint plays the engine's own moves. Analysis (hints, win rate, candidates) always uses the strongest checkpoint, regardless of this.">opponent</label>
+          <input type="range" id="model-slider" min="0" max="0" value="0" step="1" style="flex:1;min-width:80px">
+          <span id="model-label" class="mono" style="display:inline-block;width:130px;text-align:right;font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto">&mdash;</span>
+        </div>
+        <div class="row">
+          <button id="back" title="Back one move (&larr;)">&#9664; Back</button>
+          <button id="fwd" title="Forward one move (&rarr;)">Forward &#9654;</button>
+          <button id="undo" title="Undo — rewind to your last decision">Undo</button>
+        </div>
+        <div class="row">
+          <button id="t-probe-mode" title="Click board points to force the engine to genuinely evaluate them">Mark points&hellip;</button>
+          <button id="clear-probe" title="Clear marked points">Clear points</button>
         </div>
       </div>
       <div class="toggles">
         <label><input type="checkbox" id="t-hints" checked> show candidate moves on board</label>
+        <label><input type="checkbox" id="t-analysis" checked> show win rate &amp; analysis panel</label>
+        <label><input type="checkbox" id="t-chart" checked> show win-rate chart</label>
+        <label><input type="checkbox" id="t-cands" checked> show candidates list</label>
+        <label><input type="checkbox" id="t-explore"> force wider exploration</label>
+        <label>candidates shown
+          <select id="topn" style="margin-left:4px">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="40">40</option>
+          </select>
+        </label>
+      </div>
+      <div class="probe-hint" id="probe-hint" style="display:none">
+        Marking points on — click empty intersections to force the engine to
+        genuinely search them (shown as squares). Click again to unmark.
       </div>
       <div id="status">Your move — you are <b>Black</b>. (Or pick a color above.)</div>
     </div>
-    <div class="panel">
+    <div class="panel" id="panel-analysis">
       <h2>Analysis</h2>
       <div class="bignums">
         <div class="bignum"><div class="v mono" id="wr-num">—</div><div class="k">win rate</div></div>
@@ -135,13 +202,14 @@ label { font-size:12.5px; color:var(--ink-soft); }
       </div>
       <div id="ana-status" class="mono"></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="panel-chart">
       <h2>Win rate — Black</h2>
       <svg id="wrchart"></svg>
     </div>
-    <div class="panel">
+    <div class="panel" id="panel-cands">
       <h2>Candidates</h2>
       <div class="cands" id="cands"></div>
+      <div class="cands" id="probelist"></div>
     </div>
   </div>
 </div>
@@ -154,13 +222,57 @@ const CELL = 40, PAD = 30, OFF = 5;
 const svgNS = "http://www.w3.org/2000/svg";
 const xy = a => [PAD + (a % B) * CELL + OFF, PAD + Math.floor(a / B) * CELL + OFF];
 
-let moves = [];          // full game, black first
+// ---------- game tree ----------
+// Every position is a node {a, parent, children:[], vB, ana, winner, lastChild}.
+// `a` is the move that led to this node (null for the root/empty board). The
+// current path (root -> cur) is the game the server sees; navigating just
+// moves `cur` around the tree without deleting anything, so Back/Forward and
+// re-exploring a branch never lose analysis already computed for it.
+function makeNode(a, parent) {
+  return { a, parent, children: [], vB: parent ? null : 0, ana: null, winner: null, lastChild: null };
+}
+let root = makeNode(null, null);
+root.setup = null;       // {black:[...], white:[...], first:0|1} for a custom starting position
+let cur = root;
 let human = 0;           // 0 black, 1 white
 let over = false;
 let gen = 0;             // driver generation; bump to cancel the running loop
+let moves = [];           // path from root to cur, recomputed by syncMoves()
 let ana = null;          // latest /api/analyze payload for the current position
 let anaKey = null;       // moves.join(",") the payload belongs to
-let evalHist = [0.5];    // evalHist[k] = black win rate after k moves
+let chartHover = null;   // hovered ply or null
+let probeMode = false;   // click-to-mark mode for forcing exploration of a point
+let probePoints = new Set();   // action indices forced to get a genuine readout
+let MODELS = [];         // [{id,label,iter}], weakest..strongest, from /api/models
+let opponentModelId = null;  // checkpoint the ENGINE'S OWN MOVES are played with
+                              // (analysis always uses the strongest checkpoint server-side)
+let setupMode = false;   // board-editor mode for building a custom position
+let setupTool = "black"; // "black" | "white" | "erase" — what the next setup click does
+let setupFirst = 0;      // who moves first from the position being built
+let setupEdit = null;    // {black:Set, white:Set} staged stones while setupMode is on
+
+function invalidateAnalysisCache() { cur.ana = null; ana = null; anaKey = null; }
+function firstColor() { return (root.setup && root.setup.first) || 0; }
+function colorToMove() { return (firstColor() + moves.length) % 2; }
+function isOccupied(a) {
+  if (setupMode) return setupEdit.black.has(a) || setupEdit.white.has(a);
+  if (moves.includes(a)) return true;
+  const s = root.setup;
+  return !!(s && (s.black.includes(a) || s.white.includes(a)));
+}
+
+function pathNodes() {          // root..cur inclusive
+  const arr = [];
+  for (let n = cur; n; n = n.parent) arr.push(n);
+  return arr.reverse();
+}
+function syncMoves() { moves = pathNodes().filter(n => n.parent).map(n => n.a); }
+function forwardChild(node) {
+  if (!node.children.length) return null;
+  return (node.lastChild && node.children.includes(node.lastChild))
+    ? node.lastChild : node.children[node.children.length - 1];
+}
+function pathDepth(n) { let d = 0; for (let x = n; x.parent; x = x.parent) d++; return d; }
 
 const $ = id => document.getElementById(id);
 const svg = $("board-svg");
@@ -192,13 +304,33 @@ function qColor(dq) {          // dq = bestQ - q, in [0, 2]
   return ["var(--q3)", "#fff"];
 }
 
+function drawStone(a, p) {
+  const [x, y] = xy(a);
+  el("circle", { cx:x, cy:y, r:16.5, fill:p===0?"var(--stone-b)":"var(--stone-w)",
+                 stroke:p===0?"#000":"#B9B2A2" }, dyn);
+}
+
 function draw() {
   dyn.innerHTML = "";
+
+  if (setupMode) {
+    // Editing a brand-new position: show only the staged stones, nothing
+    // from whatever tree/game was in progress before "Set up position" was
+    // clicked (that tree is untouched and resumes on Cancel).
+    setupEdit.black.forEach(a => drawStone(a, 0));
+    setupEdit.white.forEach(a => drawStone(a, 1));
+    return;
+  }
+
   const showHints = $("t-hints").checked && anaKey === moves.join(",");
   if (showHints && ana && ana.top && !over) {
     const bestQ = ana.top.length ? ana.top[0][2] : 0;
     ana.top.forEach(([a, pr, q], k) => {
-      if (moves.includes(a) || pr < 0.015) return;
+      // No extra pr threshold here beyond what the server already applied —
+      // the "candidates shown" (topn) setting is what decides how many dots
+      // appear; a client-side floor on top of that just silently hid most
+      // of them once exploration spread visits across many weak candidates.
+      if (isOccupied(a)) return;
       const [x, y] = xy(a);
       const [fill, ink] = qColor(bestQ - q);
       const r = 8 + 9.5 * Math.sqrt(pr);
@@ -214,12 +346,37 @@ function draw() {
       }
     });
   }
+  // Marked (probe) points always read their number from ana.probe, which the
+  // server keeps populated for every marked action regardless of whether it
+  // also makes the natural top-N — unlike ana.top, so the number doesn't
+  // wink out once other moves accumulate more visits.
+  const probeData = (ana && anaKey === moves.join(",") && ana.probe)
+    ? new Map(ana.probe.map(p => [p[0], p])) : null;
+  probePoints.forEach(a => {
+    if (isOccupied(a)) return;
+    const [x, y] = xy(a);
+    const p = probeData && probeData.get(a);
+    el("rect", { x:x-9, y:y-9, width:18, height:18, rx:3,
+      fill: p ? "var(--panel)" : "none", opacity:0.94,
+      stroke:"var(--accent)", "stroke-width":2,
+      "stroke-dasharray": p ? "none" : "3 2" }, dyn);
+    if (p) {
+      const q = p[2];
+      const t = el("text", { x, y:y+3.5, "text-anchor":"middle", "font-size":9.5,
+        fill:"var(--ink)", "font-weight":700, "pointer-events":"none" }, dyn);
+      t.textContent = wrPct(q).toFixed(0);
+    }
+  });
+  if (root.setup) {
+    root.setup.black.forEach(a => drawStone(a, 0));
+    root.setup.white.forEach(a => drawStone(a, 1));
+  }
+  const first = firstColor();
   moves.forEach((a, i) => {
-    const [x, y] = xy(a), p = i % 2;
-    el("circle", { cx:x, cy:y, r:16.5, fill:p===0?"var(--stone-b)":"var(--stone-w)",
-                   stroke:p===0?"#000":"#B9B2A2" }, dyn);
-    const t = el("text", { x, y:y+4, "text-anchor":"middle", "font-size":12, "font-weight":600,
-                           fill:p===0?"#CFC9BC":"#4A443A" }, dyn);
+    const p = (i + first) % 2;
+    drawStone(a, p);
+    const t = el("text", { x:xy(a)[0], y:xy(a)[1]+4, "text-anchor":"middle", "font-size":12,
+                           "font-weight":600, fill:p===0?"#CFC9BC":"#4A443A" }, dyn);
     t.textContent = i + 1;
   });
   if (moves.length) {
@@ -234,11 +391,20 @@ function fmtSide(wrB) {   // black win rate 0..1 -> "B 64.2%" / "W 55.0%"
   return wrB >= 0.5 ? `B ${(wrB*100).toFixed(1)}%` : `W ${((1-wrB)*100).toFixed(1)}%`;
 }
 function setEval(wrB, vB) {
+  if (wrB == null) {
+    $("evalfill").style.width = "50%";
+    $("evaltxt").textContent = "—";
+    $("wr-num").textContent = "—";
+    $("score-num").textContent = "—";
+    return;
+  }
   $("evalfill").style.width = (wrB * 100) + "%";
   $("evaltxt").textContent = fmtSide(wrB);
   $("wr-num").textContent = fmtSide(wrB);
   $("score-num").textContent = vB >= 0 ? `B+${vB.toFixed(2)}` : `W+${(-vB).toFixed(2)}`;
 }
+function renderEvalForCur() { setEval(cur.vB != null ? (1 + cur.vB) / 2 : null, cur.vB); }
+function recordEval(vB) { cur.vB = vB; setEval((1 + vB) / 2, vB); drawChart(); }
 
 function drawCands() {
   const div = $("cands");
@@ -251,8 +417,7 @@ function drawCands() {
   head.innerHTML = "<i></i><span>move</span><span>visits</span><span>win</span><span>Q</span>";
   div.appendChild(head);
   const bestQ = ana.top.length ? ana.top[0][2] : 0;
-  for (const [a, pr, q] of ana.top) {
-    if (pr < 0.01) continue;
+  for (const [a, pr, q] of ana.top) {   // server already caps this list to `topn`
     const row = document.createElement("div");
     row.className = "cand mono";
     row.innerHTML = `<i style="background:${qColor(bestQ - q)[0]}"></i>` +
@@ -264,15 +429,83 @@ function drawCands() {
   }
 }
 
+function drawProbeList() {
+  const div = $("probelist");
+  div.innerHTML = "";
+  if (!probePoints.size) return;
+  const head = document.createElement("div");
+  head.className = "cand head";
+  head.innerHTML = "<i></i><span>marked</span><span>visits</span><span>win</span><span>Q</span>";
+  div.appendChild(head);
+  const current = ana && anaKey === moves.join(",") ? ana : null;
+  const bestQ = current && current.top && current.top.length ? current.top[0][2] : 0;
+  const byA = new Map((current && current.probe ? current.probe : []).map(p => [p[0], p]));
+  for (const a of probePoints) {
+    const row = document.createElement("div");
+    row.className = "cand mono";
+    const p = byA.get(a);
+    if (p) {
+      const [, pr, q, n] = p;
+      row.innerHTML = `<i class="sq" style="background:${qColor(bestQ - q)[0]}"></i>` +
+        `<span>${coord(a)}</span>` +
+        `<span class="bar"><span style="width:${(pr*100).toFixed(1)}%"></span></span>` +
+        `<span>${wrPct(q).toFixed(1)}%</span>` +
+        `<span>${q >= 0 ? "+" : ""}${q.toFixed(2)}</span>`;
+    } else {
+      row.innerHTML = `<i class="sq" style="background:var(--chip)"></i>` +
+        `<span>${coord(a)}</span><span class="bar"></span>` +
+        `<span style="color:var(--ink-soft)">&hellip;</span><span>&mdash;</span>`;
+    }
+    div.appendChild(row);
+  }
+}
+
+// ---------- move list / branch strip ----------
+function drawMovelist() {
+  const nodes = pathNodes();
+  const div = $("movelist");
+  div.innerHTML = "";
+  nodes.forEach((n, i) => {
+    if (!n.parent) return;   // root has no move
+    const btn = document.createElement("button");
+    btn.className = "mv" + (n === cur ? " cur" : "");
+    btn.textContent = String(i);
+    btn.title = `${i}. ${coord(n.a)}`;
+    btn.onclick = () => navigate(n);
+    div.appendChild(btn);
+  });
+  const bdiv = $("branches");
+  if (cur.children.length > 1) {
+    bdiv.style.display = "flex";
+    bdiv.innerHTML = '<span class="lab">variations:</span>';
+    const fwd = forwardChild(cur);
+    cur.children.forEach(c => {
+      const btn = document.createElement("button");
+      btn.className = "mv" + (c === fwd ? " cur" : "");
+      btn.textContent = coord(c.a);
+      btn.title = `variation ${coord(c.a)}`;
+      btn.onclick = () => navigate(c);
+      bdiv.appendChild(btn);
+    });
+  } else {
+    bdiv.style.display = "none";
+  }
+}
+function updateNavButtons() {
+  $("back").disabled = !cur.parent;
+  $("fwd").disabled = !cur.children.length;
+  $("undo").disabled = cur === root;
+}
+
 // ---------- win-rate chart ----------
 const chart = $("wrchart");
-let chartHover = null;   // hovered ply or null
 function drawChart() {
   chart.innerHTML = "";
   const W = chart.clientWidth || 300, H = 118;
   chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const pl = 26, pr = 8, pt = 10, pb = 16;
-  const n = Math.max(evalHist.length - 1, 20);
+  const nodes = pathNodes();
+  const n = Math.max(nodes.length - 1, 20);
   const X = i => pl + (W - pl - pr) * i / n;
   const Y = wr => pt + (1 - wr) * (H - pt - pb);
   el("line", { x1:pl, y1:Y(0.5), x2:W-pr, y2:Y(0.5), stroke:"var(--line)",
@@ -289,7 +522,7 @@ function drawChart() {
     t.textContent = m;
   }
   const pts = [];
-  evalHist.forEach((wr, i) => { if (wr != null) pts.push([X(i), Y(wr), i, wr]); });
+  nodes.forEach((nd, i) => { if (nd.vB != null) pts.push([X(i), Y((1 + nd.vB) / 2)]); });
   if (pts.length > 1)
     el("polyline", { points: pts.map(p => `${p[0]},${p[1]}`).join(" "),
       fill:"none", stroke:"var(--wr)", "stroke-width":2, "stroke-linejoin":"round" }, chart);
@@ -297,22 +530,32 @@ function drawChart() {
     const lp = pts[pts.length - 1];
     el("circle", { cx:lp[0], cy:lp[1], r:3.5, fill:"var(--wr)" }, chart);
   }
-  if (chartHover != null && evalHist[chartHover] != null) {
-    const hx = X(chartHover), hy = Y(evalHist[chartHover]);
+  const curIdx = nodes.length - 1;
+  el("line", { x1:X(curIdx), y1:pt, x2:X(curIdx), y2:H-pb, stroke:"var(--accent)", opacity:.3 }, chart);
+  if (chartHover != null && nodes[chartHover] && nodes[chartHover].vB != null) {
+    const wr = (1 + nodes[chartHover].vB) / 2;
+    const hx = X(chartHover), hy = Y(wr);
     el("line", { x1:hx, y1:pt, x2:hx, y2:H-pb, stroke:"var(--ink-soft)", opacity:.5 }, chart);
     el("circle", { cx:hx, cy:hy, r:4, fill:"none", stroke:"var(--ink)", "stroke-width":1.5 }, chart);
     const t = el("text", { x:Math.min(Math.max(hx, pl+30), W-40), y:pt+2,
       "text-anchor":"middle", "font-size":10, fill:"var(--ink)", "font-weight":600 }, chart);
-    t.textContent = `move ${chartHover} · ${fmtSide(evalHist[chartHover])}`;
+    t.textContent = `move ${chartHover} · ${fmtSide(wr)}`;
   }
   const cap = el("rect", { x:0, y:0, width:W, height:H, fill:"transparent" }, chart);
-  cap.addEventListener("mousemove", ev => {
+  const plyAt = ev => {
     const r = chart.getBoundingClientRect();
     const i = Math.round(((ev.clientX - r.left) / r.width * W - pl) / (W - pl - pr) * n);
-    const h = (i >= 0 && i < evalHist.length) ? i : null;
+    return (i >= 0 && i < nodes.length) ? i : null;
+  };
+  cap.addEventListener("mousemove", ev => {
+    const h = plyAt(ev);
     if (h !== chartHover) { chartHover = h; drawChart(); }
   });
   cap.addEventListener("mouseleave", () => { chartHover = null; drawChart(); });
+  cap.addEventListener("click", ev => {   // jump to that point in the game, KaTrain-style
+    const h = plyAt(ev);
+    if (h != null) navigate(nodes[h]);
+  });
 }
 
 // ---------- game driver ----------
@@ -323,43 +566,82 @@ async function post(path, body) {
   return r.json();
 }
 
-function recordEval(wrB) {
-  evalHist[moves.length] = wrB;
-  evalHist.length = moves.length + 1;
-  drawChart();
+function statusHtml(winner) {
+  if (winner === -1) return "<b>Draw</b> — full board.";
+  return winner === human ? "<b>You win!</b> Five in a row." :
+    `<b>Engine wins</b> — five in a row (${winner === 0 ? "Black" : "White"}).`;
+}
+function turnStatus() {
+  return colorToMove() === human ? "Your move." : "Engine to move.";
 }
 
 function finish(winner) {
+  cur.winner = winner;
   over = true;
-  if (winner === -1) { setStatus("<b>Draw</b> — full board."); recordEval(0.5); }
-  else {
-    setStatus(winner === human ? "<b>You win!</b> Five in a row." :
-      `<b>Engine wins</b> — five in a row (${winner === 0 ? "Black" : "White"}).`);
-    recordEval(winner === 0 ? 1 : 0);
-    setEval(winner === 0 ? 1 : 0, winner === 0 ? 1 : -1);
+  setStatus(statusHtml(winner));
+  recordEval(winner === -1 ? 0 : (winner === 0 ? 1 : -1));
+  draw(); drawMovelist(); updateNavButtons();
+}
+
+// Move (or reuse) to a child of `cur` reached by playing `a` — creates a new
+// branch only if this move hasn't been explored from here before.
+function playMove(a) {
+  let child = cur.children.find(c => c.a === a);
+  if (!child) { child = makeNode(a, cur); cur.children.push(child); }
+  gotoNode(child);
+  return child;
+}
+
+// Pure navigation: move `cur` to `node` (already in the tree) and re-render
+// everything for that position, restoring any cached analysis instantly.
+function gotoNode(node) {
+  if (node.parent) node.parent.lastChild = node;
+  cur = node;
+  syncMoves();
+  over = cur.winner != null;
+  chartHover = null;
+  if (cur.ana) { ana = cur.ana; anaKey = moves.join(","); }
+  else { ana = null; anaKey = null; }
+  draw(); drawChart(); drawCands(); drawProbeList(); drawMovelist(); updateNavButtons();
+  renderEvalForCur();
+  if (ana && ana.top && ana.top.length) {
+    const best = ana.top[0];
+    $("ana-status").textContent = `${ana.sims.toLocaleString()} sims · ` +
+      `best ${coord(best[0])} (${(best[1]*100).toFixed(0)}% of visits)`;
+  } else {
+    $("ana-status").textContent = "";
   }
-  draw();
+  if (over) setStatus(statusHtml(cur.winner));
+  else if (cur.children.length === 0) setStatus(turnStatus());
+  else setStatus(`Reviewing move ${moves.length} — play a stone to branch, or step ▶ Forward.`);
+}
+
+// User-triggered navigation: render the position and (re)start the analysis
+// / autoplay driver loop for it.
+function navigate(node) {
+  gotoNode(node);
+  driver();
 }
 
 async function driver() {
   const g = ++gen;
   while (g === gen && !over) {
-    const engineTurn = moves.length % 2 !== human;
+    const isFrontier = cur.children.length === 0;   // only autoplay at the tip of the line
+    const engineTurn = isFrontier && colorToMove() !== human;
     const target = +$("sims").value;
     const key = moves.join(",");
     const ready = anaKey === key && ana && ana.sims >= target;
 
     if (engineTurn && ready) {                       // play from the analysed tree
       let j;
-      try { j = await post("/api/move", { moves, sims: target }); }
+      try { j = await post("/api/move", { moves, sims: target, model: opponentModelId, setup: root.setup }); }
       catch (e) { setStatus("connection error — retrying"); await sleep(1000); continue; }
       if (g !== gen) return;
       if (j.error) { setStatus("Error: " + j.error); return; }
       if (j.move !== undefined) {
-        const ec = moves.length % 2;
-        moves.push(j.move);
-        recordEval(ec === 0 ? (1 + j.q) / 2 : (1 - j.q) / 2);
-        draw();
+        const ec = colorToMove();
+        playMove(j.move);
+        recordEval(ec === 0 ? j.q : -j.q);
         if (j.winner !== undefined) { finish(j.winner); return; }
         setStatus(`Engine played <b class="mono">${coord(j.move)}</b> · your move.`);
       } else if (j.winner !== undefined) { finish(j.winner); return; }
@@ -368,18 +650,28 @@ async function driver() {
 
     if (!engineTurn && anaKey === key && ana && ana.sims >= ana.cap) return; // idle at cap
 
+    // Chunk exactly up to `target` while still climbing toward it, so the
+    // reported sims count lands on what was actually asked for instead of
+    // overshooting by up to a full chunk (e.g. 800 requested -> 250s land on
+    // 1000). Once past target, fall back to normal-sized chunks for the
+    // deeper idle refinement while reviewing.
+    const soFar = (anaKey === key && ana) ? ana.sims : 0;
+    const chunk = soFar < target ? Math.min(250, target - soFar) : 250;
     let j;
-    try { j = await post("/api/analyze", { moves, chunk: 250 }); }
+    try {
+      j = await post("/api/analyze", { moves, chunk,
+        explore: $("t-explore").checked, probe: Array.from(probePoints),
+        topn: +$("topn").value, setup: root.setup });
+    }
     catch (e) { setStatus("connection error — retrying"); await sleep(1000); continue; }
     if (g !== gen || key !== moves.join(",")) continue;
     if (j.error) { setStatus("Error: " + j.error); return; }
     if (j.winner !== undefined) { finish(j.winner); return; }
-    ana = j; anaKey = key;
+    ana = j; anaKey = key; cur.ana = j;
     const vB = j.player === 0 ? j.value : -j.value;
-    const wrB = (1 + vB) / 2;
-    setEval(wrB, vB);
-    recordEval(wrB);
+    recordEval(vB);
     drawCands();
+    drawProbeList();
     draw();
     const best = j.top[0];
     $("ana-status").textContent = `${j.sims.toLocaleString()} sims · ` +
@@ -387,52 +679,227 @@ async function driver() {
     if (engineTurn)
       setStatus(`Engine thinking&hellip; <span class="mono">${j.sims.toLocaleString()} / ` +
         `${target.toLocaleString()}</span> sims <span class="spin"></span>`);
+    else if (!isFrontier)
+      setStatus(`Reviewing move ${moves.length} — play a stone to branch, or step ▶ Forward.`);
   }
 }
 
 // ---------- input ----------
 svg.addEventListener("click", ev => {
-  if (over || moves.length % 2 !== human) return;
   const pt = svg.createSVGPoint();
   pt.x = ev.clientX; pt.y = ev.clientY;
   const q = pt.matrixTransform(svg.getScreenCTM().inverse());
   const c = Math.round((q.x - PAD - OFF) / CELL), r = Math.round((q.y - PAD - OFF) / CELL);
   if (c < 0 || c >= B || r < 0 || r >= B) return;
   const a = r * B + c;
-  if (moves.includes(a)) return;
-  moves.push(a);
-  evalHist.length = moves.length;   // eval for the new position comes from analysis
-  draw(); drawChart();
+  if (setupMode) { handleSetupClick(a); return; }
+  if (probeMode) {
+    if (isOccupied(a)) return;
+    if (probePoints.has(a)) probePoints.delete(a); else probePoints.add(a);
+    invalidateAnalysisCache();
+    draw(); drawProbeList();
+    driver();
+    return;
+  }
+  if (over || colorToMove() !== human) return;
+  if (isOccupied(a)) return;
+  playMove(a);
   driver();
 });
 
-function newGame(color) {
-  moves = []; human = color; over = false;
-  ana = null; anaKey = null; evalHist = [0.5]; chartHover = null;
-  draw(); drawChart(); drawCands();
+document.addEventListener("keydown", ev => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+  if (ev.key === "ArrowLeft") { if (cur.parent) { navigate(cur.parent); ev.preventDefault(); } }
+  else if (ev.key === "ArrowRight") { const f = forwardChild(cur); if (f) { navigate(f); ev.preventDefault(); } }
+});
+
+function newGame(color, setup) {
+  root = makeNode(null, null);
+  root.setup = setup || null;
+  cur = root; human = color; over = false;
+  moves = []; ana = null; anaKey = null; chartHover = null;
+  probePoints.clear();
+  if (probeMode) $("t-probe-mode").onclick();   // toggle off, resets label/hint too
+  draw(); drawChart(); drawCands(); drawProbeList(); drawMovelist(); updateNavButtons();
   setEval(0.5, 0);
   $("ana-status").textContent = "";
-  setStatus(color === 0 ? "Your move — you are <b>Black</b>." :
-    "You are <b>White</b> — engine opens.");
+  const you = color === 0 ? "Black" : "White";
+  if (setup) {
+    setStatus(`Custom position — ${setup.first === 0 ? "Black" : "White"} to move next, ` +
+      `you are <b>${you}</b>.`);
+  } else {
+    setStatus(color === 0 ? "Your move — you are <b>Black</b>." :
+      "You are <b>White</b> — engine opens.");
+  }
   driver();
 }
 $("new-black").onclick = () => newGame(0);
 $("new-white").onclick = () => newGame(1);
-$("undo").onclick = () => {
-  if (!moves.length) return;
-  moves.pop();
-  while (moves.length && moves.length % 2 !== human) moves.pop();
-  over = false;
-  ana = null; anaKey = null;
-  evalHist.length = moves.length + 1;
-  draw(); drawChart(); drawCands();
-  setStatus("Your move.");
+
+// ---------- board setup (place stones freely, then start from there) ----------
+function setupControlsDisabled(disabled) {
+  ["back", "fwd", "undo", "new-black", "new-white", "t-probe-mode", "clear-probe"]
+    .forEach(id => { $(id).disabled = disabled; });
+}
+function selectSetupTool(tool) {
+  setupTool = tool;
+  $("setup-black").classList.toggle("toggle-on", tool === "black");
+  $("setup-white").classList.toggle("toggle-on", tool === "white");
+  $("setup-erase").classList.toggle("toggle-on", tool === "erase");
+}
+function selectSetupFirst(color) {
+  setupFirst = color;
+  $("setup-first-black").classList.toggle("toggle-on", color === 0);
+  $("setup-first-white").classList.toggle("toggle-on", color === 1);
+}
+function handleSetupClick(a) {
+  if (setupTool === "erase") {
+    setupEdit.black.delete(a); setupEdit.white.delete(a);
+  } else {
+    const set = setupTool === "black" ? setupEdit.black : setupEdit.white;
+    const other = setupTool === "black" ? setupEdit.white : setupEdit.black;
+    other.delete(a);
+    if (set.has(a)) set.delete(a); else set.add(a);   // click again to remove
+  }
+  draw();
+}
+function enterSetupMode() {
+  setupMode = true;
+  setupEdit = { black: new Set(), white: new Set() };
+  selectSetupTool("black");
+  selectSetupFirst(0);
+  if (probeMode) $("t-probe-mode").onclick();
+  $("t-setup-mode").classList.add("toggle-on");
+  $("t-setup-mode").textContent = "Setting up… (click board)";
+  $("setup-panel").style.display = "block";
+  setupControlsDisabled(true);
+  gen++;   // stop any running driver loop while editing; nothing is sent mid-edit
+  setStatus("Setting up a position — click intersections to place stones.");
+  draw();
+}
+function exitSetupMode() {
+  setupMode = false;
+  setupEdit = null;
+  $("t-setup-mode").classList.remove("toggle-on");
+  $("t-setup-mode").textContent = "Set up position…";
+  $("setup-panel").style.display = "none";
+  setupControlsDisabled(false);
+  updateNavButtons();
+  draw();
+}
+$("t-setup-mode").onclick = () => { if (setupMode) exitSetupMode(); else enterSetupMode(); };
+$("setup-black").onclick = () => selectSetupTool("black");
+$("setup-white").onclick = () => selectSetupTool("white");
+$("setup-erase").onclick = () => selectSetupTool("erase");
+$("setup-clear").onclick = () => { setupEdit.black.clear(); setupEdit.white.clear(); draw(); };
+$("setup-first-black").onclick = () => selectSetupFirst(0);
+$("setup-first-white").onclick = () => selectSetupFirst(1);
+$("setup-cancel").onclick = () => { exitSetupMode(); gotoNode(cur); driver(); };  // resume, restore status
+function startFromSetup(color) {
+  const setup = { black: Array.from(setupEdit.black), white: Array.from(setupEdit.white),
+                  first: setupFirst };
+  exitSetupMode();
+  newGame(color, setup);
+}
+$("setup-start-black").onclick = () => startFromSetup(0);
+$("setup-start-white").onclick = () => startFromSetup(1);
+$("back").onclick = () => { if (cur.parent) navigate(cur.parent); };
+$("fwd").onclick = () => { const f = forwardChild(cur); if (f) navigate(f); };
+$("undo").onclick = () => {                      // rewind to your last decision point
+  if (cur === root) return;
+  let n = cur.parent;
+  while (n.parent && (firstColor() + pathDepth(n)) % 2 !== human) n = n.parent;
+  navigate(n);
+};
+
+$("t-probe-mode").onclick = () => {
+  probeMode = !probeMode;
+  $("t-probe-mode").classList.toggle("toggle-on", probeMode);
+  $("t-probe-mode").textContent = probeMode ? "Marking points… (click to place)" : "Mark points…";
+  $("probe-hint").style.display = probeMode ? "block" : "none";
+};
+$("clear-probe").onclick = () => {
+  if (!probePoints.size) return;
+  probePoints.clear();
+  invalidateAnalysisCache();
+  draw(); drawProbeList();
   driver();
 };
-$("t-hints").onchange = draw;
+$("t-explore").onchange = () => {
+  invalidateAnalysisCache();
+  draw(); drawCands();
+  driver();
+};
+$("topn").onchange = () => {
+  anaKey = null;   // force one more analyze round-trip to pick up the new size
+  driver();
+};
+
+// ---------- opponent strength ----------
+// A slider over every checkpoint the server found next to the one it was
+// launched with (weakest/lowest iter first) — dragging it doubles as
+// "pick a strength" and "pick an exact iteration". This only changes which
+// net plays the ENGINE'S OWN MOVES; analysis (hints/win-rate/candidates) is
+// always the strongest checkpoint server-side, so changing this does not
+// touch the analysis tree or its cache at all.
+async function loadModels() {
+  let j;
+  try { j = await (await fetch("/api/models")).json(); }
+  catch (e) { return; }
+  MODELS = j.models || [];
+  opponentModelId = j.default;
+  const slider = $("model-slider");
+  slider.max = String(Math.max(0, MODELS.length - 1));
+  const idx = Math.max(0, MODELS.findIndex(m => m.id === opponentModelId));
+  slider.value = String(idx);
+  updateModelLabel();
+}
+function updateModelLabel() {   // cheap live preview while dragging — no network, no re-render
+  const idx = +$("model-slider").value;
+  const m = MODELS[idx];
+  if (m) $("model-label").textContent = m.label;
+}
+function commitModelSelection() {   // fires once (on release / arrow key), not per pixel of drag
+  const idx = +$("model-slider").value;
+  const m = MODELS[idx];
+  if (m) { opponentModelId = m.id; $("model-label").textContent = m.label; }
+  driver();   // picks up the new opponent strength on its next move, if any
+}
+$("model-slider").oninput = updateModelLabel;
+$("model-slider").onchange = commitModelSelection;
+
+// ---------- view toggles ----------
+function applyPanelVisibility() {
+  $("panel-analysis").classList.toggle("hidden", !$("t-analysis").checked);
+  $("panel-chart").classList.toggle("hidden", !$("t-chart").checked);
+  $("panel-cands").classList.toggle("hidden", !$("t-cands").checked);
+}
+function saveViewPrefs() {
+  localStorage.setItem("gomoku-view", JSON.stringify({
+    hints: $("t-hints").checked, analysis: $("t-analysis").checked,
+    chart: $("t-chart").checked, cands: $("t-cands").checked,
+  }));
+}
+function loadViewPrefs() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem("gomoku-view") || "null"); } catch (e) { /* ignore */ }
+  if (!p) return;
+  $("t-hints").checked = p.hints !== false;
+  $("t-analysis").checked = p.analysis !== false;
+  $("t-chart").checked = p.chart !== false;
+  $("t-cands").checked = p.cands !== false;
+}
+$("t-hints").onchange = () => { draw(); saveViewPrefs(); };
+$("t-analysis").onchange = () => { applyPanelVisibility(); saveViewPrefs(); };
+$("t-chart").onchange = () => { applyPanelVisibility(); saveViewPrefs(); if ($("t-chart").checked) drawChart(); };
+$("t-cands").onchange = () => { applyPanelVisibility(); saveViewPrefs(); };
 window.addEventListener("resize", drawChart);
 
-draw(); drawChart();
+loadViewPrefs();
+applyPanelVisibility();
+loadModels();
+draw(); drawChart(); drawMovelist(); updateNavButtons();
 setEval(0.5, 0);
 driver();          // analyse the empty board so first-move hints appear
 </script>
